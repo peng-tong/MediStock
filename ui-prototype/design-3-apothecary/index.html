@@ -1,0 +1,801 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>药仓记 · 药品进销存系统（复古国药风 · 原型稿三）</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@500;700;900&display=swap">
+<style>
+/* ============================================================
+   风格三 · 复古国药风
+   设计语言：老药铺 × 现代数字化 —— 处方笺 / 账册 / 朱砂印章 / 新中式
+   配色：宣纸米白 + 墨色 + 朱砂红 + 松石黛青 + 描金
+   ============================================================ */
+:root{
+  --paper:#F5EEDD;          /* 宣纸底 */
+  --paper-2:#FBF6E9;        /* 卡片纸面 */
+  --paper-3:#EFE6D2;        /* 深一点纸色 */
+  --ink:#3B3A34;            /* 墨色主文字 */
+  --ink-2:#6E6B60;          /* 次级 */
+  --ink-3:#9C978A;          /* 弱化 */
+  --line:#C9BFAA;           /* 墨线 */
+  --line-soft:#DCD3BF;
+  --vermilion:#B0432F;      /* 朱砂红 */
+  --vermilion-deep:#8E3424;
+  --jade:#3E6B5A;           /* 松石绿 */
+  --jade-soft:#E4ECE4;
+  --gold:#A9883E;           /* 描金 */
+  --side:#243830;           /* 侧栏墨绿 */
+  --side-ink:#D9C9A3;       /* 侧栏金文字 */
+  --serif:"Noto Serif SC","Songti SC","SimSun","STSong",serif;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%}
+body{
+  font-family:var(--serif);background:var(--paper);color:var(--ink);font-size:14px;
+  background-image:
+    repeating-linear-gradient(0deg, rgba(200,190,170,.12) 0 1px, transparent 1px 22px),
+    repeating-linear-gradient(90deg, rgba(200,190,170,.10) 0 1px, transparent 1px 22px),
+    radial-gradient(700px 400px at 80% 10%, rgba(169,136,62,.06), transparent 60%);
+}
+::-webkit-scrollbar{width:9px;height:9px}
+::-webkit-scrollbar-thumb{background:#C9BFAA;border-radius:4px}
+button{font-family:inherit;cursor:pointer}
+input,select{font-family:inherit}
+
+/* 印章（圆形篆刻样式） */
+.seal{display:inline-grid;place-items:center;width:44px;height:44px;border-radius:50%;
+  border:2px solid var(--vermilion);color:var(--vermilion);font-size:15px;font-weight:900;
+  transform:rotate(-4deg);flex:none;box-shadow:inset 0 0 0 3px var(--paper-2), inset 0 0 0 3.5px var(--vermilion)}
+.seal.small{width:26px;height:26px;font-size:10px;border-width:1.5px;box-shadow:inset 0 0 0 2px var(--paper-2)}
+.seal.jade{border-color:var(--jade);color:var(--jade)}
+
+/* ============ 登录页 ============ */
+#login{position:fixed;inset:0;z-index:100;display:grid;place-items:center;
+  background:
+    radial-gradient(600px 300px at 50% 15%, rgba(169,136,62,.10), transparent 70%),
+    var(--paper)}
+#login::before{content:"薬";position:absolute;right:6%;bottom:4%;font-size:180px;font-weight:900;
+  color:rgba(169,136,62,.10);transform:rotate(-6deg);font-family:var(--serif)}
+.login-frame{position:relative;width:430px;background:var(--paper-2);padding:46px 42px 38px;
+  border:1px solid var(--line);outline:1px solid var(--line);outline-offset:5px;border-radius:2px;
+  box-shadow:0 12px 30px rgba(90,80,60,.14)}
+.login-frame::before{content:"";position:absolute;top:-5px;left:-5px;width:14px;height:14px;
+  border-top:2px solid var(--vermilion);border-left:2px solid var(--vermilion)}
+.login-frame::after{content:"";position:absolute;bottom:-5px;right:-5px;width:14px;height:14px;
+  border-bottom:2px solid var(--vermilion);border-right:2px solid var(--vermilion)}
+.login-head{text-align:center;border-bottom:1px solid var(--line);padding-bottom:22px;margin-bottom:26px;
+  position:relative}
+.login-head .brand{font-size:30px;font-weight:900;letter-spacing:6px;color:var(--ink)}
+.login-head .brand i{color:var(--vermilion);font-style:normal}
+.login-head .sub{font-size:12.5px;color:var(--ink-2);letter-spacing:4px;margin-top:8px}
+.login-head .seal{position:absolute;right:0;top:-6px}
+.retro-field{margin-bottom:18px}
+.retro-field label{display:block;font-size:13px;color:var(--ink);margin-bottom:7px;letter-spacing:1px;
+  padding-left:10px;border-left:3px solid var(--vermilion)}
+.retro-field input{width:100%;height:42px;background:#FFFDF4;border:1px solid var(--line);border-radius:2px;
+  padding:0 14px;font-size:14px;color:var(--ink);outline:none;transition:.2s}
+.retro-field input:focus{border-color:var(--vermilion);box-shadow:0 0 0 1px rgba(176,67,47,.3)}
+.captcha-row{display:flex;gap:12px}
+.captcha-box{flex:none;width:118px;height:42px;border:1px solid var(--line);border-radius:2px;
+  display:grid;place-items:center;background:repeating-linear-gradient(45deg,#F3EAD8,#F3EAD8 7px,#E9DFC9 7px,#E9DFC9 14px);
+  color:var(--vermilion);font-size:20px;font-weight:900;letter-spacing:5px;cursor:pointer;user-select:none}
+.btn-login{width:100%;height:46px;margin-top:8px;border:none;background:var(--vermilion);color:#FBF6E9;
+  font-size:16px;font-weight:700;letter-spacing:6px;border-radius:2px;transition:.2s;
+  box-shadow:0 3px 0 var(--vermilion-deep)}
+.btn-login:hover{background:#B64A35}
+.btn-login:active{transform:translateY(2px);box-shadow:none}
+.login-foot{display:flex;justify-content:space-between;margin-top:22px;font-size:11.5px;color:var(--ink-3);letter-spacing:1px}
+
+/* ============ 主布局 ============ */
+#app{display:none;height:100vh;overflow:hidden}
+#app.show{display:grid;grid-template-columns:236px 1fr;animation:fadeIn .4s ease}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+
+/* 侧栏（墨绿底金文字） */
+aside{background:var(--side);color:var(--side-ink);display:flex;flex-direction:column;padding:20px 14px;
+  border-right:2px solid var(--gold)}
+aside .brand-logo{display:flex;align-items:center;gap:12px;padding:4px 6px 18px;border-bottom:1px solid rgba(217,201,163,.35)}
+aside .brand-logo .mark{width:40px;height:40px;border-radius:2px;border:1.5px solid var(--gold);color:var(--gold);
+  display:grid;place-items:center;font-size:21px;font-weight:900}
+aside .brand-logo b{font-size:17px;color:var(--side-ink);letter-spacing:3px;font-weight:700}
+aside .brand-logo b i{color:var(--gold);font-style:normal}
+.nav{flex:1;overflow-y:auto;padding-top:12px}
+.nav-group .glabel{font-size:11px;color:rgba(217,201,163,.5);padding:10px 10px 5px;letter-spacing:3px}
+.nav-item{display:flex;align-items:center;gap:10px;padding:9px 11px;margin:2px 0;border-radius:2px;
+  color:rgba(217,201,163,.82);cursor:pointer;transition:.18s;font-size:13.5px;border-left:2px solid transparent}
+.nav-item svg{width:16px;height:16px;flex:none;opacity:.9}
+.nav-item:hover{color:#F3E8C9;background:rgba(217,201,163,.08)}
+.nav-item.active{color:#F3E8C9;background:rgba(169,136,62,.16);border-left-color:var(--gold);font-weight:700}
+aside .side-foot{padding:14px 6px 0;border-top:1px solid rgba(217,201,163,.3);font-size:12px;
+  color:rgba(217,201,163,.55);letter-spacing:2px;display:flex;align-items:center;gap:8px}
+
+/* 顶栏 */
+.main{display:flex;flex-direction:column;overflow:hidden}
+header{background:var(--paper-2);border-bottom:1px solid var(--line);box-shadow:0 1px 0 var(--line-soft);
+  padding:13px 26px;display:flex;align-items:center;gap:18px}
+.search{flex:1;max-width:400px;display:flex;align-items:center;gap:10px;background:#FFFDF4;
+  border:1px solid var(--line);border-radius:2px;padding:0 14px;height:38px;transition:.2s}
+.search:focus-within{border-color:var(--vermilion)}
+.search svg{color:var(--ink-3)}
+.search input{border:none;outline:none;flex:1;background:transparent;color:var(--ink);font-size:13.5px}
+.header-right{margin-left:auto;display:flex;align-items:center;gap:14px}
+.icon-btn{position:relative;width:38px;height:38px;border-radius:2px;border:1px solid var(--line);
+  background:#FFFDF4;display:grid;place-items:center;color:var(--ink-2)}
+.icon-btn .dot{position:absolute;top:6px;right:7px;width:7px;height:7px;border-radius:50%;background:var(--vermilion)}
+.user-meta b{display:block;color:var(--ink);font-size:13.5px;letter-spacing:.5px}
+.user-meta span{font-size:11.5px;color:var(--ink-3)}
+.avatar{width:38px;height:38px;border-radius:2px;background:var(--jade);color:#FBF6E9;
+  display:grid;place-items:center;font-weight:700;font-size:15px;border:1px solid var(--gold)}
+
+/* ============ 内容区 ============ */
+.content{flex:1;overflow-y:auto;padding:26px 30px 44px}
+.page{display:none}
+.page.active{display:block;animation:pageIn .35s ease}
+@keyframes pageIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.page-head{display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:22px;
+  border-bottom:2px solid var(--ink);padding-bottom:12px;position:relative}
+.page-head::after{content:"";position:absolute;left:0;bottom:-3px;width:96px;height:2px;background:var(--vermilion)}
+.page-head h2{font-size:24px;font-weight:900;letter-spacing:4px;color:var(--ink);display:flex;align-items:center;gap:12px}
+.page-head h2 .vt{writing-mode:vertical-rl;font-size:12px;letter-spacing:4px;color:var(--vermilion);font-weight:700;
+  border:1px solid var(--vermilion);padding:4px 3px;border-radius:2px}
+.page-head p{font-size:12.5px;color:var(--ink-2);margin-top:6px;letter-spacing:1px}
+.page-actions{display:flex;gap:10px}
+.btn-line{height:36px;padding:0 16px;border-radius:2px;border:1px solid var(--ink);background:transparent;
+  color:var(--ink);font-size:13px;letter-spacing:1px;transition:.18s}
+.btn-line:hover{border-color:var(--vermilion);color:var(--vermilion)}
+.btn-seal{height:36px;padding:0 16px;border-radius:2px;border:1px solid var(--vermilion);background:var(--vermilion);
+  color:#FBF6E9;font-size:13px;letter-spacing:1px;transition:.18s}
+.btn-seal:hover{background:var(--vermilion-deep)}
+.btn-mini{height:28px;padding:0 10px;border-radius:2px;border:1px solid var(--line);background:#FFFDF4;
+  color:var(--ink-2);font-size:12px}
+.btn-mini:hover{border-color:var(--vermilion);color:var(--vermilion)}
+
+/* 卡片（双线账册框） */
+.card{position:relative;background:var(--paper-2);border:1px solid var(--line);border-radius:2px;
+  padding:22px;margin-bottom:18px;box-shadow:0 2px 0 var(--line-soft)}
+.card::before{content:"";position:absolute;top:6px;left:6px;right:6px;bottom:6px;pointer-events:none;
+  border:1px dashed var(--line-soft);border-radius:1px}
+.card > *{position:relative;z-index:1}
+.card-title{font-size:15.5px;font-weight:900;color:var(--ink);letter-spacing:2px;margin-bottom:16px;
+  display:flex;align-items:center;gap:8px}
+.card-title::before{content:"◆";color:var(--vermilion);font-size:11px}
+.card-title .more{font-size:12px;color:var(--ink-3);cursor:pointer;letter-spacing:1px;margin-left:auto}
+.card-title .more:hover{color:var(--vermilion)}
+.stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:18px}
+.stat-card{background:var(--paper-2);border:1px solid var(--line);border-radius:2px;padding:18px 20px;
+  border-top:3px solid var(--vermilion);box-shadow:0 2px 0 var(--line-soft);position:relative}
+.stat-card:nth-child(2){border-top-color:var(--gold)}
+.stat-card:nth-child(3){border-top-color:var(--jade)}
+.stat-card:nth-child(4){border-top-color:#7B6B52}
+.stat-card .lbl{font-size:12.5px;color:var(--ink-2);letter-spacing:2px}
+.stat-card .val{font-size:25px;font-weight:900;color:var(--ink);margin:10px 0 6px;letter-spacing:1px}
+.stat-card .trend{font-size:11.5px;color:var(--ink-3);letter-spacing:.5px}
+.trend.up{color:var(--jade)}.trend.down{color:var(--vermilion)}.trend.warn{color:#8A6D1F}
+.stat-card .seal{position:absolute;right:12px;top:12px}
+.grid-2{display:grid;grid-template-columns:1.4fr 1fr;gap:18px}
+.grid-2.even{grid-template-columns:1fr 1fr}
+
+/* 账册表格（带竖格线） */
+.tbl-wrap{border:1px solid var(--line);border-radius:2px;overflow:hidden}
+table.tbl{width:100%;border-collapse:collapse;font-size:13px}
+.tbl thead th{background:var(--jade-soft);color:var(--jade);font-weight:700;text-align:left;padding:11px 14px;
+  letter-spacing:1px;border-right:1px solid #D5E0D5;border-bottom:1px solid var(--line);white-space:nowrap}
+.tbl thead th:last-child{border-right:none}
+.tbl tbody td{padding:12px 14px;border-bottom:1px solid var(--line-soft);border-right:1px solid var(--line-soft);color:var(--ink)}
+.tbl tbody td:last-child{border-right:none}
+.tbl tbody tr:last-child td{border-bottom:none}
+.tbl tbody tr:hover td{background:#F3EAD8}
+.tbl .name{font-weight:700;color:var(--ink)}
+.tbl .dim{color:var(--ink-3);font-size:12px}
+.tbl .mono{font-family:"Consolas","SF Mono",monospace;font-size:12.5px}
+/* 印章式状态 */
+.stamp{display:inline-flex;align-items:center;padding:2px 11px;font-weight:700;font-size:12px;letter-spacing:1px;
+  border-radius:2px;transform:rotate(-1.5deg)}
+.stamp.ok{border:1.5px solid var(--vermilion);color:var(--vermilion);background:rgba(176,67,47,.05)}
+.stamp.warn{border:1.5px solid #8A6D1F;color:#8A6D1F;background:rgba(138,109,31,.05)}
+.stamp.danger{border:1.5px solid var(--vermilion-deep);color:var(--vermilion-deep);background:rgba(142,52,36,.08)}
+.stamp.info{border:1.5px solid var(--jade);color:var(--jade);background:rgba(62,107,90,.06)}
+.stamp.gray{border:1.5px solid var(--ink-3);color:var(--ink-3)}
+.row-actions{display:flex;gap:6px}
+
+/* 列表 */
+.mini-list{display:flex;flex-direction:column}
+.mini-item{display:flex;align-items:center;gap:12px;padding:11px 6px;border-bottom:1px dashed var(--line-soft)}
+.mini-item:last-child{border-bottom:none}
+.mini-item .info{flex:1;min-width:0}
+.mini-item .info b{display:block;color:var(--ink);font-size:13.5px;font-weight:700}
+.mini-item .info span{font-size:12px;color:var(--ink-3)}
+.mini-item .right{text-align:right}
+.mini-item .right b{display:block;color:var(--ink);font-size:13px}
+.mini-item .right span{font-size:11.5px;color:var(--ink-3)}
+
+/* 工具栏 / 筛选 */
+.toolbar{display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap}
+.toolbar input,.toolbar select{height:36px;border:1px solid var(--line);border-radius:2px;padding:0 12px;
+  font-size:13px;background:#FFFDF4;color:var(--ink);outline:none;min-width:140px}
+.toolbar input:focus,.toolbar select:focus{border-color:var(--vermilion)}
+.toolbar .spacer{flex:1}
+.filters{display:flex;gap:8px;margin:12px 0 16px;flex-wrap:wrap}
+.chip{padding:5px 14px;border-radius:2px;border:1px solid var(--line);background:#FFFDF4;font-size:12.5px;
+  color:var(--ink-2);cursor:pointer;letter-spacing:1px;transition:.15s}
+.chip.active{background:var(--ink);border-color:var(--ink);color:var(--paper-2)}
+.chip:hover{border-color:var(--vermilion);color:var(--vermilion)}
+.pager{display:flex;align-items:center;justify-content:flex-end;gap:10px;margin-top:16px;font-size:12.5px;color:var(--ink-3)}
+.pager .pbtn{width:28px;height:28px;border-radius:2px;border:1px solid var(--line);background:#FFFDF4;display:grid;
+  place-items:center;color:var(--ink)}
+.pager .pbtn.cur{background:var(--ink);color:var(--paper-2)}
+
+/* 表单 */
+.form-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.form-grid .f-item label{display:block;font-size:12.5px;color:var(--ink);font-weight:700;margin-bottom:7px;letter-spacing:.5px}
+.form-grid .f-item input,.form-grid .f-item select{width:100%;height:38px;border:1px solid var(--line);border-radius:2px;
+  padding:0 12px;font-size:13px;color:var(--ink);background:#FFFDF4;outline:none}
+.form-grid .f-item input:focus,.form-grid .f-item select:focus{border-color:var(--vermilion)}
+.order-total{display:flex;justify-content:flex-end;gap:36px;margin-top:16px;padding:14px 22px;border-radius:2px;
+  background:var(--jade-soft);border:1px solid #CBD8CB}
+.order-total b{display:block;font-size:14.5px;color:var(--ink)}
+.order-total .big{font-size:23px;color:var(--vermilion);font-weight:900}
+
+/* 占位 */
+.placeholder{text-align:center;padding:80px 0;color:var(--ink-3)}
+.placeholder .ph-ico{width:86px;height:86px;margin:0 auto 22px;border-radius:50%;border:2px dashed var(--line);
+  color:var(--vermilion);display:grid;place-items:center;font-size:40px;font-weight:900;transform:rotate(-4deg)}
+.placeholder h3{color:var(--ink);font-size:18px;letter-spacing:3px;margin-bottom:10px}
+.placeholder p{font-size:13px;line-height:2;letter-spacing:.5px}
+
+/* 租户卡片 */
+.tenant-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.tenant-card{position:relative;background:var(--paper-2);border:1px solid var(--line);border-radius:2px;
+  padding:22px;box-shadow:0 2px 0 var(--line-soft)}
+.tenant-card .t-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;
+  border-bottom:1px solid var(--line);padding-bottom:10px}
+.tenant-card .t-name{font-size:16px;font-weight:900;letter-spacing:1px}
+.tenant-card .t-row{display:flex;justify-content:space-between;font-size:13px;padding:8px 0;border-bottom:1px dashed var(--line-soft)}
+.tenant-card .t-row span{color:var(--ink-3)}
+.tenant-card .t-row b{color:var(--ink)}
+.usage{margin-top:14px}
+.usage .bar{height:7px;border-radius:2px;background:#E7DEC9;overflow:hidden;margin-top:8px;border:1px solid var(--line-soft)}
+.usage .bar i{display:block;height:100%;background:var(--jade)}
+</style>
+</head>
+<body>
+
+<!-- ================= 登录页 ================= -->
+<div id="login">
+  <div class="login-frame">
+    <div class="login-head">
+      <span class="seal">药</span>
+      <div class="brand">药仓<i>记</i></div>
+      <div class="sub">药品进销存管理系统 · 庚子年制</div>
+    </div>
+    <div class="retro-field"><label>掌柜账号</label><input type="text" value="admin"></div>
+    <div class="retro-field"><label>登店密码</label><input type="password" value="123456"></div>
+    <div class="retro-field">
+      <label>验证印鉴</label>
+      <div class="captcha-row">
+        <input type="text" style="flex:1" placeholder="输入验证码">
+        <div class="captcha-box" title="点击刷新">8Q3K</div>
+      </div>
+    </div>
+    <button class="btn-login" onclick="doLogin()">进 店 营 业</button>
+    <div class="login-foot"><span>JWT 凭证登录</span><span>验证码 · 图形印鉴</span></div>
+  </div>
+</div>
+
+<!-- ================= 主应用 ================= -->
+<div id="app">
+  <aside>
+    <div class="brand-logo"><span class="mark">药</span><b>药仓<i>记</i></b></div>
+    <nav class="nav">
+      <div class="nav-item active" data-page="dashboard">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="8" height="5" rx="1"/><rect x="13" y="3" width="8" height="9" rx="1"/><rect x="3" y="10" width="8" height="11" rx="1"/><rect x="13" y="14" width="8" height="7" rx="1"/></svg>
+        今日店账
+      </div>
+      <div class="nav-group"><div class="glabel">基础 · 药簿</div>
+        <div class="nav-item" data-page="drugs">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 3h6a4 4 0 0 1 4 4v10a4 4 0 0 1-4 4H9a4 4 0 0 1-4-4V7a4 4 0 0 1 4-4Z"/><path d="M9 3v18M13 3v18"/><path d="M5 12h14"/></svg>
+          药品药簿
+        </div>
+        <div class="nav-item" data-page="placeholder">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M7 14h2m2 0h2"/></svg>
+          药品分类
+        </div>
+        <div class="nav-item" data-page="placeholder">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 21h18"/><path d="M5 21V8l7-5 7 5v13"/></svg>
+          供应商名册
+        </div>
+        <div class="nav-item" data-page="placeholder">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="8" r="3.5"/><path d="M3 20c1-3 3.5-4.5 6-4.5s5 1.5 6 4.5"/><path d="M17 9l2 2 4-4"/></svg>
+          客户名册
+        </div>
+        <div class="nav-item" data-page="placeholder">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 9l9-5 9 5v11H3z"/><path d="M7 13h3m4 0h3M7 17h3m4 0h3"/></svg>
+          仓房库位
+        </div>
+      </div>
+      <div class="nav-group"><div class="glabel">进货 · 采购</div>
+        <div class="nav-item" data-page="purchase">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 4h18l-6 8v6l-4 2v-8z"/></svg>
+          采购订单
+        </div>
+        <div class="nav-item" data-page="placeholder">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 9l8-5 8 5v11H4z"/><path d="M9 13h6"/></svg>
+          验收入库
+        </div>
+        <div class="nav-item" data-page="placeholder">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 4h18l-6 8v6l-4 2v-8z"/><path d="M13 20h-2M15 12l-6 6"/></svg>
+          采购退货
+        </div>
+        <div class="nav-item" data-page="placeholder">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M7 3h10l2 4v14H5V7z"/><path d="M9 12h6M12 9v6"/></svg>
+          订单审核
+        </div>
+      </div>
+      <div class="nav-group"><div class="glabel">销货 · 销售</div>
+        <div class="nav-item" data-page="sales">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v18M12 3l4 4M12 3L8 7"/><path d="M7 9h10l2 3H5z"/><path d="M5 12h14l1 3H4z"/></svg>
+          销售开单
+        </div>
+        <div class="nav-item" data-page="placeholder">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 9l8-5 8 5v11H4z"/><path d="M12 13v4"/></svg>
+          销售出库
+        </div>
+        <div class="nav-item" data-page="placeholder">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 9l8-5 8 5v11H4z"/><path d="M9 14h6"/></svg>
+          销售退货
+        </div>
+      </div>
+      <div class="nav-group"><div class="glabel">仓储 · 库存</div>
+        <div class="nav-item" data-page="inventory">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 9l8-5 8 5v11H4z"/><path d="M4 9h16"/><path d="M12 9v11"/></svg>
+          库存查询
+        </div>
+        <div class="nav-item" data-page="placeholder">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/></svg>
+          批次账目
+        </div>
+        <div class="nav-item" data-page="placeholder">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 12a9 9 0 1 1 18 0v3a2 2 0 0 1-2 2h-1V12a6 6 0 0 0-12 0v5H5a2 2 0 0 1-2-2z"/></svg>
+          出入流水
+        </div>
+        <div class="nav-item" data-page="placeholder">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 12h4l2-5 4 10 2-5h6"/></svg>
+          盘点对账
+        </div>
+        <div class="nav-item" data-page="placeholder">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 4h8l2 3v13H6V7z"/><path d="M10 13l2 2 4-4"/></svg>
+          仓间调拨
+        </div>
+      </div>
+      <div class="nav-group"><div class="glabel">效期 · 预警</div>
+        <div class="nav-item" data-page="alert">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3L2.5 19h19z"/><path d="M12 9.5v4.5M12 17.5v.1"/></svg>
+          效期预警
+        </div>
+      </div>
+      <div class="nav-group"><div class="glabel">账册 · 报表</div>
+        <div class="nav-item" data-page="placeholder">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20V10M10 20V4M16 20v-8M21 20H3"/></svg>
+          账册报表
+        </div>
+      </div>
+      <div class="nav-group"><div class="glabel">铺面 · 系统</div>
+        <div class="nav-item" data-page="users">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="8" r="3.5"/><path d="M3 20c1-3 3.5-4.5 6-4.5s5 1.5 6 4.5"/><path d="M16 11h4M18 9v4"/></svg>
+          伙计管理
+        </div>
+        <div class="nav-item" data-page="placeholder">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="8" cy="9" r="3.5"/><path d="M2 18c.8-2.2 3-3.5 6-3.5s5.2 1.3 6 3.5"/><rect x="14" y="9" width="7" height="3" rx="1"/></svg>
+          身份角色
+        </div>
+        <div class="nav-item" data-page="placeholder">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-14 0M12 5V3M12 21v-2M5 12H3M21 12h-2"/></svg>
+          铺规参数
+        </div>
+        <div class="nav-item" data-page="placeholder">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 12a8 8 0 1 1 16 0M12 12l4-4"/></svg>
+          经营日志
+        </div>
+      </div>
+      <div class="nav-group"><div class="glabel">联号 · 租户</div>
+        <div class="nav-item" data-page="tenant">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="8" height="8" rx="1.5"/><rect x="13" y="4" width="8" height="8" rx="1.5"/><rect x="3" y="14" width="8" height="8" rx="1.5"/><rect x="13" y="14" width="8" height="8" rx="1.5"/></svg>
+          联号管理
+        </div>
+      </div>
+    </nav>
+    <div class="side-foot"><span class="seal jade small">记</span>原型稿 · 仅供设计比选</div>
+  </aside>
+
+  <div class="main">
+    <header>
+      <div class="search">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
+        <input type="text" placeholder="翻查 药名 / 批号 / 单号 ...">
+      </div>
+      <div class="header-right">
+        <div class="icon-btn" title="预警通知">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 9a6 6 0 1 1 12 0c0 5 2 6 2 6H4s2-1 2-6"/><path d="M10 20a2 2 0 0 0 4 0"/></svg>
+          <span class="dot"></span>
+        </div>
+        <div class="user-meta"><b>王掌柜</b><span>总店 · 康民连锁药业</span></div>
+        <div class="avatar">王</div>
+      </div>
+    </header>
+
+    <div class="content">
+      <!-- ========== 页面：今日店账（工作台） ========== -->
+      <section class="page active" data-page="dashboard">
+        <div class="page-head">
+          <div>
+            <h2><span class="vt">店</span>今日店账</h2>
+            <p>宣统三年改元 · 公元 2026 年 10 月 29 日 ｜ 经营一览</p>
+          </div>
+          <div class="page-actions">
+            <button class="btn-line">誊抄报表</button>
+            <button class="btn-seal" onclick="go('sales')">+ 新开销售单</button>
+          </div>
+        </div>
+        <div class="stat-grid">
+          <div class="stat-card">
+            <span class="seal small">销</span>
+            <div class="lbl">今日销售额</div><div class="val">¥ 86,420</div><div class="trend up">▲ 较昨日增 12.5%</div>
+          </div>
+          <div class="stat-card">
+            <span class="seal small jade">存</span>
+            <div class="lbl">库存总额</div><div class="val">¥ 1,284,560</div><div class="trend up">在库批次 1,423 个</div>
+          </div>
+          <div class="stat-card">
+            <span class="seal small" style="color:#8A6D1F;border-color:#8A6D1F">警</span>
+            <div class="lbl">待处理预警</div><div class="val">12 条</div><div class="trend warn">近效期 8 · 低库存 4</div>
+          </div>
+          <div class="stat-card">
+            <span class="seal small" style="color:#7B6B52;border-color:#7B6B52">单</span>
+            <div class="lbl">待审核采购</div><div class="val">3 单</div><div class="trend down">合计 ¥ 46,100</div>
+          </div>
+        </div>
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-title">近七日销货走势<span class="more">查看月账 ›</span></div>
+            <svg viewBox="0 0 420 170" style="width:100%;height:auto">
+              <defs>
+                <linearGradient id="g3" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0" stop-color="#B0432F" stop-opacity=".20"/><stop offset="1" stop-color="#B0432F" stop-opacity="0"/>
+                </linearGradient>
+              </defs>
+              <g stroke="#DCD3BF"><line x1="40" y1="20" x2="420" y2="20"/><line x1="40" y1="62" x2="420" y2="62"/><line x1="40" y1="105" x2="420" y2="105"/><line x1="40" y1="150" x2="420" y2="150"/></g>
+              <path d="M40 128 L106 118 L172 122 L238 96 L304 102 L370 60 L420 70 L420 150 L40 150 Z" fill="url(#g3)"/>
+              <path d="M40 128 L106 118 L172 122 L238 96 L304 102 L370 60 L420 70" fill="none" stroke="#B0432F" stroke-width="2.5" stroke-linecap="round"/>
+              <g fill="#B0432F"><circle cx="40" cy="128" r="3.5"/><circle cx="106" cy="118" r="3.5"/><circle cx="172" cy="122" r="3.5"/><circle cx="238" cy="96" r="3.5"/><circle cx="304" cy="102" r="3.5"/><circle cx="370" cy="60" r="3.5"/><circle cx="420" cy="70" r="3.5"/></g>
+              <g fill="#9C978A" font-size="10">
+                <text x="40" y="165" text-anchor="middle">23</text><text x="106" y="165" text-anchor="middle">24</text><text x="172" y="165" text-anchor="middle">25</text><text x="238" y="165" text-anchor="middle">26</text><text x="304" y="165" text-anchor="middle">27</text><text x="370" y="165" text-anchor="middle">28</text><text x="420" y="165" text-anchor="middle">29</text>
+              </g>
+              <g fill="#B0432F" font-size="10.5" font-weight="700"><text x="370" y="52" text-anchor="end">¥86,420</text></g>
+            </svg>
+          </div>
+          <div class="card">
+            <div class="card-title">库存药类占比<span class="more">细账 ›</span></div>
+            <div style="display:flex;align-items:center;gap:22px">
+              <svg viewBox="0 0 120 120" width="150">
+                <circle cx="60" cy="60" r="42" fill="none" stroke="#DCD3BF" stroke-width="16"/>
+                <circle cx="60" cy="60" r="42" fill="none" stroke="#B0432F" stroke-width="16" stroke-dasharray="99 264" transform="rotate(-90 60 60)"/>
+                <circle cx="60" cy="60" r="42" fill="none" stroke="#A9883E" stroke-width="16" stroke-dasharray="70 264" stroke-dashoffset="-99" transform="rotate(-90 60 60)"/>
+                <circle cx="60" cy="60" r="42" fill="none" stroke="#3E6B5A" stroke-width="16" stroke-dasharray="57 264" stroke-dashoffset="-169" transform="rotate(-90 60 60)"/>
+                <circle cx="60" cy="60" r="42" fill="none" stroke="#7B6B52" stroke-width="16" stroke-dasharray="34 264" stroke-dashoffset="-226" transform="rotate(-90 60 60)"/>
+                <text x="60" y="58" text-anchor="middle" font-size="17" font-weight="900" fill="#3B3A34">1,423</text>
+                <text x="60" y="72" text-anchor="middle" font-size="9" fill="#9C978A">批次</text>
+              </svg>
+              <div style="flex:1">
+                <div class="mini-item"><div class="info"><b>处方药</b><span>抗生素 · 慢病 · 消化</span></div><div class="right"><b>38%</b></div></div>
+                <div class="mini-item"><div class="info"><b>OTC 非处方</b><span>解热镇痛 · 抗过敏</span></div><div class="right"><b>27%</b></div></div>
+                <div class="mini-item"><div class="info"><b>中成药</b><span>感冒 · 胃肠</span></div><div class="right"><b>22%</b></div></div>
+                <div class="mini-item"><div class="info"><b>慢病特药</b><span>心脑血管</span></div><div class="right"><b>13%</b></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="grid-2 even">
+          <div class="card">
+            <div class="card-title">效期预警 · 需上心<span class="more">全部预警 ›</span></div>
+            <div class="mini-list">
+              <div class="mini-item">
+                <div class="info"><b>氯雷他定片 10mg×6片</b><span>批号 L20250730 · 已于 2026-10-15 过期</span></div>
+                <div class="right"><span class="stamp danger">已过期</span><b style="color:var(--vermilion-deep)">45 盒</b></div>
+              </div>
+              <div class="mini-item">
+                <div class="info"><b>连花清瘟胶囊 0.35g×48粒</b><span>批号 L20251002 · 2026-11-20 到期（剩 22 日）</span></div>
+                <div class="right"><span class="stamp warn">近效期</span><b>120 盒</b></div>
+              </div>
+              <div class="mini-item">
+                <div class="info"><b>藿香正气口服液 10ml×10支</b><span>批号 H20251012 · 2027-10-12 到期</span></div>
+                <div class="right"><span class="stamp info">九十日</span><b>260 盒</b></div>
+              </div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-title">最新出入流水<span class="more">全部流水 ›</span></div>
+            <div class="mini-list">
+              <div class="mini-item">
+                <div class="info"><b>销售出库 · SO-20261029-002</b><span>阿莫西林胶囊 · 批号 A20250812 · 王掌柜</span></div>
+                <div class="right"><b style="color:var(--vermilion)">-120 盒</b><span>10:24</span></div>
+              </div>
+              <div class="mini-item">
+                <div class="info"><b>采购入库 · PO-20261027-002</b><span>藿香正气口服液 · 批号 H20251012 · 张伙计</span></div>
+                <div class="right"><b style="color:var(--jade)">+300 盒</b><span>昨日 16:02</span></div>
+              </div>
+              <div class="mini-item">
+                <div class="info"><b>销售退货 · SR-20261026-005</b><span>布洛芬缓释胶囊 · 批号 B20250903 · 李伙计</span></div>
+                <div class="right"><b style="color:var(--jade)">+15 盒</b><span>10-26 14:30</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========== 页面：药品药簿 ========== -->
+      <section class="page" data-page="drugs">
+        <div class="page-head">
+          <div><h2><span class="vt">药</span>药品药簿</h2><p>基础药簿 · 通用名 / 规格 / 剂型 / 批准文号 / 存储条件</p></div>
+          <div class="page-actions"><button class="btn-line">Excel 誊入</button><button class="btn-seal">+ 登册新药</button></div>
+        </div>
+        <div class="toolbar">
+          <input style="width:230px" placeholder="翻查 通用名 / 商品名 / 条码">
+          <select><option>全部剂型</option><option>胶囊</option><option>片剂</option><option>口服液</option></select>
+          <select><option>全部分类</option><option>处方药</option><option>OTC</option></select>
+          <div class="spacer"></div><span style="font-size:12.5px;color:var(--ink-3)">共登册 328 味</span>
+        </div>
+        <div class="tbl-wrap">
+          <table class="tbl">
+            <thead><tr><th>药品名称</th><th>规格 / 剂型</th><th>分类</th><th>生产厂家</th><th>批准文号</th><th>存储条件</th><th>库存</th><th>操作</th></tr></thead>
+            <tbody>
+              <tr><td class="name">阿莫西林胶囊</td><td>0.25g×24粒 · 胶囊</td><td><span class="stamp info">处方药</span></td><td>华北制药</td><td class="mono">国药准字H13021786</td><td>常温 ≤30℃</td><td>850 盒</td><td class="row-actions"><button class="btn-mini">改册</button></td></tr>
+              <tr><td class="name">布洛芬缓释胶囊</td><td>0.3g×20粒 · 胶囊</td><td><span class="stamp gray">OTC</span></td><td>中美史克</td><td class="mono">国药准字H10970393</td><td>常温 ≤30℃</td><td>640 盒</td><td class="row-actions"><button class="btn-mini">改册</button></td></tr>
+              <tr><td class="name">连花清瘟胶囊</td><td>0.35g×48粒 · 胶囊</td><td><span class="stamp gray">OTC</span></td><td>以岭药业</td><td class="mono">国药准字Z20040063</td><td>常温 ≤30℃</td><td>120 盒</td><td class="row-actions"><button class="btn-mini">改册</button></td></tr>
+              <tr><td class="name">奥美拉唑肠溶胶囊</td><td>20mg×14粒 · 胶囊</td><td><span class="stamp info">处方药</span></td><td>阿斯利康</td><td class="mono">国药准字H20030920</td><td>阴凉 ≤20℃</td><td>210 盒</td><td class="row-actions"><button class="btn-mini">改册</button></td></tr>
+              <tr><td class="name">二甲双胍缓释片</td><td>0.5g×60片 · 片剂</td><td><span class="stamp info">处方药</span></td><td>扬子江药业</td><td class="mono">国药准字H20040127</td><td>常温 ≤30℃</td><td>380 盒</td><td class="row-actions"><button class="btn-mini">改册</button></td></tr>
+              <tr><td class="name">藿香正气口服液</td><td>10ml×10支 · 口服液</td><td><span class="stamp gray">OTC</span></td><td>太极集团</td><td class="mono">国药准字Z50020410</td><td>阴凉 ≤20℃</td><td>260 盒</td><td class="row-actions"><button class="btn-mini">改册</button></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="pager"><span>第 1 / 41 页</span><div style="display:flex;gap:6px"><button class="pbtn">‹</button><button class="pbtn cur">1</button><button class="pbtn">2</button><button class="pbtn">›</button></div></div>
+      </section>
+
+      <!-- ========== 页面：库存查询 ========== -->
+      <section class="page" data-page="inventory">
+        <div class="page-head">
+          <div><h2><span class="vt">仓</span>库存查询</h2><p>按 药 / 仓 / 批次 三册核对 · 批次 + 效期为本行要务</p></div>
+          <div class="page-actions"><button class="btn-line">誊抄</button><button class="btn-seal">+ 仓间调拨</button></div>
+        </div>
+        <div class="filters">
+          <span class="chip active">全部</span><span class="chip">正常</span><span class="chip">近效期 90 日</span><span class="chip">近效期 30 日</span><span class="chip">已过期</span><span class="chip">低库存</span>
+        </div>
+        <div class="tbl-wrap">
+          <table class="tbl">
+            <thead><tr><th>药品名称</th><th>生产批号</th><th>有效期至</th><th>效期状态</th><th>当前库存</th><th>下限</th><th>仓库 · 库位</th><th>存储条件</th><th>操作</th></tr></thead>
+            <tbody>
+              <tr><td class="name">阿莫西林胶囊</td><td class="mono">A20250812</td><td class="mono">2027-08-12</td><td><span class="stamp ok">正常</span></td><td>850 盒</td><td>100</td><td>常温仓 A-03</td><td>常温 ≤30℃</td><td class="row-actions"><button class="btn-mini">细账</button></td></tr>
+              <tr><td class="name">连花清瘟胶囊</td><td class="mono">L20251002</td><td class="mono">2026-11-20</td><td><span class="stamp warn">近效期30日</span></td><td>120 盒</td><td>60</td><td>常温仓 B-01</td><td>常温 ≤30℃</td><td class="row-actions"><button class="btn-mini">细账</button></td></tr>
+              <tr><td class="name">奥美拉唑肠溶胶囊</td><td class="mono">O20250918</td><td class="mono">2027-09-18</td><td><span class="stamp ok">正常</span></td><td>210 盒</td><td>50</td><td>阴凉仓 C-02</td><td>阴凉 ≤20℃</td><td class="row-actions"><button class="btn-mini">细账</button></td></tr>
+              <tr><td class="name">氯雷他定片</td><td class="mono">L20250730</td><td class="mono">2026-10-15</td><td><span class="stamp danger">已过期</span></td><td>45 盒</td><td>60</td><td>常温仓 B-02</td><td>常温 ≤30℃</td><td class="row-actions"><button class="btn-mini">细账</button></td></tr>
+              <tr><td class="name">藿香正气口服液</td><td class="mono">H20251012</td><td class="mono">2027-10-12</td><td><span class="stamp ok">正常</span></td><td>260 盒</td><td>40</td><td>阴凉仓 C-01</td><td>阴凉 ≤20℃</td><td class="row-actions"><button class="btn-mini">细账</button></td></tr>
+              <tr><td class="name">维生素C片</td><td class="mono">V20250905</td><td class="mono">2027-09-05</td><td><span class="stamp warn">低于下限</span></td><td>32 盒</td><td>80</td><td>常温仓 B-03</td><td>常温 ≤30℃</td><td class="row-actions"><button class="btn-mini">细账</button></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="pager"><span>第 1 / 3 页</span><div style="display:flex;gap:6px"><button class="pbtn cur">1</button><button class="pbtn">2</button><button class="pbtn">3</button></div></div>
+      </section>
+
+      <!-- ========== 页面：销售开单 ========== -->
+      <section class="page" data-page="sales">
+        <div class="page-head">
+          <div><h2><span class="vt">单</span>销售开单</h2><p>选客户 / 药 / 批号 / 数量 / 折扣 · 出库按效期先进先出</p></div>
+          <div class="page-actions"><button class="btn-line">存为草稿</button><button class="btn-seal">✓ 钤印出库</button></div>
+        </div>
+        <div class="card">
+          <div class="form-grid">
+            <div class="f-item"><label>客户</label><select><option>康民大药房</option><option>仁和诊所</option><option>市第一人民医院药房</option></select></div>
+            <div class="f-item"><label>开单日期</label><input type="date" value="2026-10-29"></div>
+            <div class="f-item"><label>单据编号</label><input value="SO-20261029-003" disabled style="background:var(--paper-3)"></div>
+            <div class="f-item"><label>结算方式</label><select><option>现结</option><option>月结</option></select></div>
+            <div class="f-item"><label>掌柜</label><input value="王建国"></div>
+            <div class="f-item"><label>出库仓房</label><select><option>常温仓</option><option>阴凉仓</option><option>冷藏仓 2~8℃</option></select></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">药品明细<span class="more">+ 添一行</span></div>
+          <div class="tbl-wrap">
+            <table class="tbl">
+              <thead><tr><th>药品</th><th>批号</th><th>有效期</th><th>数量</th><th>单价</th><th>折扣</th><th>金额</th><th></th></tr></thead>
+              <tbody>
+                <tr>
+                  <td><select style="height:30px;border:1px solid var(--line);border-radius:2px;background:#FFFDF4;padding:0 8px;font-size:12.5px;width:170px"><option>阿莫西林胶囊 0.25g×24</option></select></td>
+                  <td><span class="stamp gray">A20250812</span></td><td class="mono">2027-08-12</td>
+                  <td><input value="120" style="width:62px;height:30px;border:1px solid var(--line);border-radius:2px;background:#FFFDF4;text-align:center"></td>
+                  <td>¥ 23.50</td><td><span class="stamp info">9.5 折</span></td>
+                  <td style="font-weight:900;color:var(--vermilion)">¥ 2,682</td>
+                  <td><button class="btn-mini" style="color:var(--vermilion)">删</button></td>
+                </tr>
+                <tr>
+                  <td><select style="height:30px;border:1px solid var(--line);border-radius:2px;background:#FFFDF4;padding:0 8px;font-size:12.5px;width:170px"><option>布洛芬缓释胶囊 0.3g×20</option></select></td>
+                  <td><span class="stamp gray">B20250903</span></td><td class="mono">2027-09-03</td>
+                  <td><input value="60" style="width:62px;height:30px;border:1px solid var(--line);border-radius:2px;background:#FFFDF4;text-align:center"></td>
+                  <td>¥ 16.80</td><td><span class="stamp gray">无</span></td>
+                  <td style="font-weight:900;color:var(--vermilion)">¥ 1,008</td>
+                  <td><button class="btn-mini" style="color:var(--vermilion)">删</button></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="order-total">
+            <div><span class="dim">数量合计</span><b>180 盒</b></div>
+            <div><span class="dim">优惠金额</span><b>¥ 142</b></div>
+            <div><span class="dim">应收合计</span><b class="big">¥ 3,690</b></div>
+          </div>
+          <p style="font-size:12px;color:var(--ink-3);margin-top:14px">规矩：出库自动按「效期优先 · 先进先出」扣减批次；过期批次拒之门外，负库存断然不许。</p>
+        </div>
+      </section>
+
+      <!-- ========== 页面：采购订单 ========== -->
+      <section class="page" data-page="purchase">
+        <div class="page-head">
+          <div><h2><span class="vt">购</span>采购订单</h2><p>进货单 · 审核钤印后验收入库并生成批次</p></div>
+          <div class="page-actions"><button class="btn-line">誊抄</button><button class="btn-seal">+ 新立采购单</button></div>
+        </div>
+        <div class="filters">
+          <span class="chip active">全部</span><span class="chip">待审核</span><span class="chip">已入库</span><span class="chip">已驳回</span>
+        </div>
+        <div class="tbl-wrap">
+          <table class="tbl">
+            <thead><tr><th>采购单号</th><th>供应商</th><th>药品明细</th><th>金额</th><th>数量</th><th>状态</th><th>日期</th><th>经办</th><th>操作</th></tr></thead>
+            <tbody>
+              <tr><td class="mono name">PO-20261028-001</td><td>华北制药</td><td>阿莫西林胶囊 ×500盒</td><td>¥ 18,500</td><td>500</td><td><span class="stamp warn">待审核</span></td><td>2026-10-28</td><td>张伙计</td><td class="row-actions"><button class="btn-mini">审核</button></td></tr>
+              <tr><td class="mono name">PO-20261027-002</td><td>太极集团</td><td>藿香正气口服液 ×300盒</td><td>¥ 9,900</td><td>300</td><td><span class="stamp ok">已入库</span></td><td>2026-10-27</td><td>张伙计</td><td class="row-actions"><button class="btn-mini">查看</button></td></tr>
+              <tr><td class="mono name">PO-20261026-003</td><td>恒瑞医药</td><td>二甲双胍缓释片 ×400盒</td><td>¥ 12,400</td><td>400</td><td><span class="stamp warn">待审核</span></td><td>2026-10-26</td><td>李伙计</td><td class="row-actions"><button class="btn-mini">审核</button></td></tr>
+              <tr><td class="mono name">PO-20261024-005</td><td>扬子江药业</td><td>奥美拉唑肠溶胶囊 ×200盒</td><td>¥ 15,200</td><td>200</td><td><span class="stamp danger">已驳回</span></td><td>2026-10-24</td><td>李伙计</td><td class="row-actions"><button class="btn-mini">查看</button></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="pager"><span>共 26 条 · 第 1 / 6 页</span><div style="display:flex;gap:6px"><button class="pbtn cur">1</button><button class="pbtn">2</button><button class="pbtn">›</button></div></div>
+      </section>
+
+      <!-- ========== 页面：效期预警 ========== -->
+      <section class="page" data-page="alert">
+        <div class="page-head">
+          <div><h2><span class="vt">警</span>效期预警</h2><p>近效期 30 / 90 日 · 库存上下限 · 过期与负库存拦截</p></div>
+          <div class="page-actions"><button class="btn-seal">✓ 全部销账</button></div>
+        </div>
+        <div class="stat-grid">
+          <div class="stat-card">
+            <span class="seal small">过</span>
+            <div class="lbl">已过期</div><div class="val">1</div><div class="trend down">已拦截出库</div>
+          </div>
+          <div class="stat-card">
+            <span class="seal small" style="color:#8A6D1F;border-color:#8A6D1F">迫</span>
+            <div class="lbl">近效期 30 日</div><div class="val">2</div><div class="trend warn">宜早促销</div>
+          </div>
+          <div class="stat-card">
+            <span class="seal small jade">近</span>
+            <div class="lbl">近效期 90 日</div><div class="val">6</div><div class="trend warn">宜调库存</div>
+          </div>
+          <div class="stat-card">
+            <span class="seal small" style="color:#7B6B52;border-color:#7B6B52">缺</span>
+            <div class="lbl">低于库存下限</div><div class="val">4</div><div class="trend warn">宜补货</div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">效期预警细账</div>
+          <div class="tbl-wrap">
+            <table class="tbl">
+              <thead><tr><th>药品</th><th>批号</th><th>有效期至</th><th>剩余日</th><th>库存</th><th>级别</th><th>建议</th><th>操作</th></tr></thead>
+              <tbody>
+                <tr><td class="name">氯雷他定片 10mg×6片</td><td class="mono">L20250730</td><td class="mono">2026-10-15</td><td style="color:var(--vermilion-deep)">-14 日</td><td>45</td><td><span class="stamp danger">已过期</span></td><td class="dim">报损 · 禁止销售</td><td class="row-actions"><button class="btn-mini">报损</button></td></tr>
+                <tr><td class="name">连花清瘟胶囊 0.35g×48粒</td><td class="mono">L20251002</td><td class="mono">2026-11-20</td><td style="color:#8A6D1F">22 日</td><td>120</td><td><span class="stamp warn">近效期30日</span></td><td class="dim">促销 · 调往高流量门店</td><td class="row-actions"><button class="btn-mini">处置</button></td></tr>
+                <tr><td class="name">维生素C片 0.1g×100片</td><td class="mono">V20250905</td><td class="mono">2027-09-05</td><td>328 日</td><td>32</td><td><span class="stamp warn">低于下限</span></td><td class="dim">建议补货 ≥ 80 盒</td><td class="row-actions"><button class="btn-mini">生采购单</button></td></tr>
+                <tr><td class="name">藿香正气口服液 10ml×10支</td><td class="mono">H20251012</td><td class="mono">2027-10-12</td><td>373 日</td><td>260</td><td><span class="stamp info">九十日内</span></td><td class="dim">观察</td><td class="row-actions"><button class="btn-mini">处置</button></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========== 页面：伙计管理（用户） ========== -->
+      <section class="page" data-page="users">
+        <div class="page-head">
+          <div><h2><span class="vt">员</span>伙计管理</h2><p>RBAC 权限 · 增删查改 / 停用 / 重置口令</p></div>
+          <div class="page-actions"><button class="btn-seal">+ 招纳伙计</button></div>
+        </div>
+        <div class="toolbar">
+          <input style="width:230px" placeholder="翻查 用户名 / 姓名">
+          <select><option>全部身份</option><option>总掌柜</option><option>库管</option><option>销售</option><option>采购</option></select>
+          <select><option>全部状态</option><option>在班</option><option>停用</option></select>
+          <div class="spacer"></div><span style="font-size:12.5px;color:var(--ink-3)">共 12 人</span>
+        </div>
+        <div class="tbl-wrap">
+          <table class="tbl">
+            <thead><tr><th>用户名</th><th>姓名</th><th>角色</th><th>所属联号</th><th>状态</th><th>最后登录</th><th>操作</th></tr></thead>
+            <tbody>
+              <tr><td class="mono name">admin</td><td>王建国</td><td><span class="stamp info">总掌柜</span></td><td>康民连锁药业</td><td><span class="stamp ok">在班</span></td><td class="dim">2026-10-29 10:12</td><td class="row-actions"><button class="btn-mini">改</button><button class="btn-mini">重置口令</button></td></tr>
+              <tr><td class="mono name">zhangwei</td><td>张伟</td><td><span class="stamp gray">采购</span></td><td>康民连锁药业</td><td><span class="stamp ok">在班</span></td><td class="dim">2026-10-29 09:03</td><td class="row-actions"><button class="btn-mini">改</button><button class="btn-mini">重置口令</button></td></tr>
+              <tr><td class="mono name">limin</td><td>李敏</td><td><span class="stamp gray">销售</span></td><td>康民连锁药业</td><td><span class="stamp ok">在班</span></td><td class="dim">2026-10-28 18:40</td><td class="row-actions"><button class="btn-mini">改</button><button class="btn-mini">重置口令</button></td></tr>
+              <tr><td class="mono name">chenhao</td><td>陈浩</td><td><span class="stamp gray">库管</span></td><td>康民连锁药业</td><td><span class="stamp danger">停用</span></td><td class="dim">2026-10-20 14:22</td><td class="row-actions"><button class="btn-mini">改</button><button class="btn-mini">重置口令</button></td></tr>
+              <tr><td class="mono name">zhourui</td><td>周瑞</td><td><span class="stamp gray">库管</span></td><td>仁和医疗</td><td><span class="stamp ok">在班</span></td><td class="dim">2026-10-29 08:55</td><td class="row-actions"><button class="btn-mini">改</button><button class="btn-mini">重置口令</button></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="pager"><span>第 1 / 3 页</span><div style="display:flex;gap:6px"><button class="pbtn cur">1</button><button class="pbtn">2</button><button class="pbtn">3</button></div></div>
+      </section>
+
+      <!-- ========== 页面：联号管理（租户） ========== -->
+      <section class="page" data-page="tenant">
+        <div class="page-head">
+          <div><h2><span class="vt">号</span>联号管理</h2><p>共享表 + tenant_id 行级隔离 · 总掌柜 / 分号掌柜两级掌权</p></div>
+          <div class="page-actions"><button class="btn-seal">+ 开设联号</button></div>
+        </div>
+        <div class="tenant-grid">
+          <div class="tenant-card">
+            <div class="t-head"><span class="t-name">康民连锁药业</span><span class="stamp ok">营业中</span></div>
+            <div class="t-row"><span>分号掌柜</span><b>王建国</b></div>
+            <div class="t-row"><span>立号时日</span><b>2026-06-01</b></div>
+            <div class="t-row"><span>等级</span><b>旗舰号</b></div>
+            <div class="usage"><span class="dim">伙计 8 / 10</span><div class="bar"><i style="width:80%"></i></div></div>
+          </div>
+          <div class="tenant-card">
+            <div class="t-head"><span class="t-name">仁和医疗</span><span class="stamp ok">营业中</span></div>
+            <div class="t-row"><span>分号掌柜</span><b>周瑞</b></div>
+            <div class="t-row"><span>立号时日</span><b>2026-08-15</b></div>
+            <div class="t-row"><span>等级</span><b>专业号</b></div>
+            <div class="usage"><span class="dim">伙计 5 / 5</span><div class="bar"><i style="width:100%;background:#8A6D1F"></i></div></div>
+          </div>
+          <div class="tenant-card">
+            <div class="t-head"><span class="t-name">百康医药</span><span class="stamp gray">歇业</span></div>
+            <div class="t-row"><span>分号掌柜</span><b>—</b></div>
+            <div class="t-row"><span>立号时日</span><b>2026-09-10</b></div>
+            <div class="t-row"><span>等级</span><b>基础号</b></div>
+            <div class="usage"><span class="dim">伙计 0 / 3</span><div class="bar"><i style="width:0%"></i></div></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========== 页面：占位 ========== -->
+      <section class="page" data-page="placeholder">
+        <div class="placeholder">
+          <div class="ph-ico">記</div>
+          <h3>此账尚在誊写中</h3>
+          <p>「分类 / 供应商 / 客户 / 仓房 / 入库 / 退货 / 审核 / 批次 / 流水 / 盘点 / 调拨 / 报表 / 角色 / 参数 / 日志」等册页<br>均沿用本套「药仓记」宣纸 + 印章 + 账册设计语言，正式开发时统一成册</p>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ================= 简易交互（纯原型演示） ================= */
+function doLogin(){
+  document.getElementById('login').style.display='none';
+  document.getElementById('app').classList.add('show');
+}
+document.querySelectorAll('.nav-item').forEach(function(item){
+  item.addEventListener('click',function(){
+    document.querySelectorAll('.nav-item').forEach(i=>i.classList.remove('active'));
+    item.classList.add('active');
+    var page=item.dataset.page;
+    document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+    var t=document.querySelector('.page[data-page="'+page+'"]');
+    if(t) t.classList.add('active');
+  });
+});
+function go(page){
+  var item=document.querySelector('.nav-item[data-page="'+page+'"]');
+  if(item) item.click();
+}
+document.querySelectorAll('.chip').forEach(function(c){
+  c.addEventListener('click',function(){
+    c.parentElement.querySelectorAll('.chip').forEach(x=>x.classList.remove('active'));
+    c.classList.add('active');
+  });
+});
+</script>
+</body>
+</html>
