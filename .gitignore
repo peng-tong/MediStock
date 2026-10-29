@@ -9,3 +9,7 @@ Thumbs.db
 
 # 日志
 *.log
+
+/.pnpm-store
+/frontend/node_modules
+/frontend/dist
