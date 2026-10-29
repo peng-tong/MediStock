@@ -2,10 +2,13 @@ package com.medistock.purchase.controller;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.medistock.common.exception.BusinessException;
+import com.medistock.common.exception.ErrorCode;
 import com.medistock.common.result.PageResult;
 import com.medistock.common.result.Result;
 import com.medistock.purchase.entity.PurchaseReturn;
 import com.medistock.purchase.service.PurchaseReturnService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -18,8 +21,8 @@ public class PurchaseReturnController {
     private final PurchaseReturnService service;
 
     @PostMapping
-    public Result<Long> create(@RequestBody PurchaseReturnCreateReq req) {
-        return Result.ok(service.createReturn(req.getOrder(), req.getItems()));
+    public Result<Long> create(@Valid @RequestBody PurchaseReturnCreateReq req) {
+        return Result.ok(service.createReturn(req.getPurchaseReturn(), req.getItems()));
     }
 
     @GetMapping
@@ -35,6 +38,10 @@ public class PurchaseReturnController {
 
     @GetMapping("/{id}")
     public Result<PurchaseReturn> detail(@PathVariable Long id) {
-        return Result.ok(service.getById(id));
+        PurchaseReturn ret = service.getById(id);
+        if (ret == null) {
+            throw new BusinessException(ErrorCode.NOT_FOUND);
+        }
+        return Result.ok(ret);
     }
 }

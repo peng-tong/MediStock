@@ -14,9 +14,10 @@ import com.medistock.inventory.mapper.InventoryFlowMapper;
 import com.medistock.inventory.mapper.StockBatchMapper;
 import com.medistock.inventory.mapper.StockMapper;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -45,16 +46,14 @@ public class StockService {
     private final TransactionTemplate transactionTemplate;
 
     public StockService(StockMapper stockMapper, StockBatchMapper batchMapper,
-                        InventoryFlowMapper flowMapper, TransactionTemplate transactionTemplate) {
+                        InventoryFlowMapper flowMapper, PlatformTransactionManager transactionManager) {
         this.stockMapper = stockMapper;
         this.batchMapper = batchMapper;
         this.flowMapper = flowMapper;
-        // 嵌套事务（savepoint）：无外层事务时行为等同 REQUIRED（新建事务）；
-        // 有外层事务（如销售出库 @Transactional 包住多行扣减）时，乐观锁冲突回滚到 savepoint 而非
-        // 标记整个事务 rollback-only，使 retry 在参与事务场景下仍可成功
-        // （否则参与事务被标记 rollbackOnly 后，最终 commit 抛 UnexpectedRollbackException，并发出库必然失败）
-        transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_NESTED);
-        this.transactionTemplate = transactionTemplate;
+        // 私有 TransactionTemplate：嵌套事务（savepoint）语义不变，但隔离对容器单例传播级别的副作用
+        // （若直接复用容器装配的单例并 setPropagationBehavior，会污染其他调用方的事务行为）
+        this.transactionTemplate = new TransactionTemplate(transactionManager);
+        this.transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_NESTED);
     }
 
     private static final AtomicLong SEQ = new AtomicLong();
@@ -64,6 +63,9 @@ public class StockService {
     /** 采购入库：同批号存在则累加，不存在则新建批次（正数） */
     public void inbound(Long drugId, Long warehouseId, String batchNo, LocalDate expiryDate,
                         BigDecimal qty, String businessNo, String remark) {
+        if (qty == null || qty.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "入库数量必须大于 0");
+        }
         retry(() -> transactionTemplate.execute(status -> {
             StockBatch batch = findBatch(drugId, warehouseId, batchNo);
             if (batch == null) {
@@ -117,6 +119,10 @@ public class StockService {
             if (batch == null) {
                 throw new BusinessException(ErrorCode.NOT_FOUND, "批次不存在");
             }
+            // 批次归属校验：防跨药品/跨仓库误冲（脏数据或参数错配时直接拦截）
+            if (!batch.getDrugId().equals(drugId) || !batch.getWarehouseId().equals(warehouseId)) {
+                throw new BusinessException(ErrorCode.VALIDATE_ERROR, "批次与药品/仓库不匹配");
+            }
             batch.setQuantity(batch.getQuantity().add(qty));
             updateWithVersion(batchMapper, batch);
             adjustStock(drugId, warehouseId, qty, businessNo,
@@ -132,6 +138,10 @@ public class StockService {
             StockBatch batch = batchMapper.selectById(batchId);
             if (batch == null) {
                 throw new BusinessException(ErrorCode.NOT_FOUND, "批次不存在");
+            }
+            // 批次归属校验：防跨药品/跨仓库误冲（脏数据或参数错配时直接拦截）
+            if (!batch.getDrugId().equals(drugId) || !batch.getWarehouseId().equals(warehouseId)) {
+                throw new BusinessException(ErrorCode.VALIDATE_ERROR, "批次与药品/仓库不匹配");
             }
             if (batch.getQuantity().compareTo(qty) < 0) {
                 throw new BusinessException(ErrorCode.STOCK_INSUFFICIENT);
@@ -182,7 +192,9 @@ public class StockService {
             try {
                 action.run();
                 return;
-            } catch (OptimisticLockingFailureException | DataIntegrityViolationException e) {
+            } catch (OptimisticLockingFailureException | DuplicateKeyException e) {
+                // 仅收窄为乐观锁版本冲突与唯一键冲突（并发同唯一键插入），
+                // 避免把 NOT NULL 违反等真实数据错误误当并发冲突重试后误报"系统繁忙"
                 log.info("库存并发冲突，第 {} 次重试", attempt + 1);
                 if (++attempt >= BizConstant.MAX_RETRY) {
                     throw new BusinessException(ErrorCode.CONCURRENT_CONFLICT);

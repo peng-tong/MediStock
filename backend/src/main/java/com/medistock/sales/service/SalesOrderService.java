@@ -33,6 +33,9 @@ public class SalesOrderService extends ServiceImpl<SalesOrderMapper, SalesOrder>
     /** 创建销售单（头 + 明细）：行金额 = 单价×数量 − 行折扣，总金额 = Σ行金额 */
     @Transactional
     public Long createOrder(SalesOrder order, List<SalesOrderItem> items) {
+        if (items == null || items.isEmpty()) {
+            throw new BusinessException(ErrorCode.VALIDATE_ERROR, "明细不能为空");
+        }
         BigDecimal total = BigDecimal.ZERO;
         for (SalesOrderItem item : items) {
             BigDecimal discount = item.getDiscountAmount() == null ? BigDecimal.ZERO : item.getDiscountAmount();
@@ -69,7 +72,8 @@ public class SalesOrderService extends ServiceImpl<SalesOrderMapper, SalesOrder>
                 .eq(SalesOrderItem::getOrderId, orderId));
     }
 
-    /** 删除：仅草稿 */
+    /** 删除：仅草稿（级联删明细 + 删头原子） */
+    @Transactional
     public void deleteOrder(Long id) {
         SalesOrder order = this.getById(id);
         if (order == null) return;

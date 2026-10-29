@@ -33,6 +33,9 @@ public class PurchaseOrderService extends ServiceImpl<PurchaseOrderMapper, Purch
     /** 创建采购单（头 + 明细），金额按明细合计 */
     @Transactional
     public Long createOrder(PurchaseOrder order, List<PurchaseOrderItem> items) {
+        if (items == null || items.isEmpty()) {
+            throw new BusinessException(ErrorCode.VALIDATE_ERROR, "明细不能为空");
+        }
         BigDecimal total = items.stream()
                 .map(i -> i.getPurchasePrice().multiply(i.getQuantity()))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -66,7 +69,8 @@ public class PurchaseOrderService extends ServiceImpl<PurchaseOrderMapper, Purch
                 .eq(PurchaseOrderItem::getOrderId, orderId));
     }
 
-    /** 删除：仅草稿 */
+    /** 删除：仅草稿（级联删明细 + 删头原子） */
+    @Transactional
     public void deleteOrder(Long id) {
         PurchaseOrder order = this.getById(id);
         if (order == null) return;

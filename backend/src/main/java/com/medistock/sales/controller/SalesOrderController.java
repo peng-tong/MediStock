@@ -6,6 +6,7 @@ import com.medistock.common.result.Result;
 import com.medistock.sales.entity.SalesOrder;
 import com.medistock.sales.service.SalesOrderService;
 import com.medistock.sales.service.SalesOutboundService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -19,7 +20,7 @@ public class SalesOrderController {
     private final SalesOutboundService outboundService;
 
     @PostMapping
-    public Result<Long> create(@RequestBody SalesOrderCreateReq req) {
+    public Result<Long> create(@Valid @RequestBody SalesOrderCreateReq req) {
         return Result.ok(service.createOrder(req.getOrder(), req.getItems()));
     }
 

@@ -3,6 +3,7 @@ package com.medistock.sales;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.medistock.common.config.TenantContext;
 import com.medistock.common.exception.BusinessException;
+import com.medistock.common.exception.ErrorCode;
 import com.medistock.inventory.entity.StockBatch;
 import com.medistock.inventory.mapper.StockBatchMapper;
 import com.medistock.inventory.service.StockService;
@@ -105,8 +106,11 @@ class SalesOutboundServiceTest {
             item.setAmount(new BigDecimal("10"));
             Long orderId = orderService.createOrder(order, List.of(item));
 
+            // 断言具体错误码：过期批次不可出库 → 报 STOCK_INSUFFICIENT（负库存/无可用批次拦截）
             assertThatThrownBy(() -> outboundService.outbound(orderId))
-                    .isInstanceOf(BusinessException.class);   // STOCK_INSUFFICIENT（过期拦截）
+                    .isInstanceOf(BusinessException.class)
+                    .extracting(e -> ((BusinessException) e).getCode())
+                    .isEqualTo(ErrorCode.STOCK_INSUFFICIENT.getCode());
         } finally {
             TenantContext.clear();
         }

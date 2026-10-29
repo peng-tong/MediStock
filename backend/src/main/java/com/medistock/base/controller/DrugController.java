@@ -34,5 +34,5 @@ public class DrugController {
     }
 
     @DeleteMapping("/{id}")
-    public Result<Void> delete(@PathVariable Long id) { service.removeById(id); return Result.ok(); }
+    public Result<Void> delete(@PathVariable Long id) { service.deleteDrug(id); return Result.ok(); }
 }

@@ -40,6 +40,13 @@ public class PurchaseInboundService {
             throw new BusinessException(ErrorCode.ORDER_STATUS_INVALID);
         }
         for (InboundReq.Item in : items) {
+            // 逐项校验：数量必须为正数、批号必填（防脏数据入库）
+            if (in.getQuantity() == null || in.getQuantity().compareTo(BigDecimal.ZERO) <= 0) {
+                throw new BusinessException(ErrorCode.VALIDATE_ERROR, "入库数量必须大于 0");
+            }
+            if (in.getBatchNo() == null || in.getBatchNo().isBlank()) {
+                throw new BusinessException(ErrorCode.VALIDATE_ERROR, "批号不能为空");
+            }
             PurchaseOrderItem item = itemMapper.selectOne(new LambdaQueryWrapper<PurchaseOrderItem>()
                     .eq(PurchaseOrderItem::getId, in.getItemId())
                     .eq(PurchaseOrderItem::getOrderId, orderId));

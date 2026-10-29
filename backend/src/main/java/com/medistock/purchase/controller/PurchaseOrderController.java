@@ -7,6 +7,7 @@ import com.medistock.purchase.entity.PurchaseOrder;
 import com.medistock.purchase.service.InboundReq;
 import com.medistock.purchase.service.PurchaseInboundService;
 import com.medistock.purchase.service.PurchaseOrderService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -20,7 +21,7 @@ public class PurchaseOrderController {
     private final PurchaseInboundService inboundService;
 
     @PostMapping
-    public Result<Long> create(@RequestBody PurchaseOrderCreateReq req) {
+    public Result<Long> create(@Valid @RequestBody PurchaseOrderCreateReq req) {
         return Result.ok(service.createOrder(req.getOrder(), req.getItems()));
     }
 

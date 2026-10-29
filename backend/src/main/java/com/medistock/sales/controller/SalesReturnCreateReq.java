@@ -11,7 +11,7 @@ import java.util.List;
 @Data
 public class SalesReturnCreateReq {
     @NotNull
-    private SalesReturn order;
+    private SalesReturn salesReturn;
     @NotNull
     private List<SalesReturnItem> items;
 }

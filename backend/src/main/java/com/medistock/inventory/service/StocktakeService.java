@@ -58,25 +58,29 @@ public class StocktakeService extends ServiceImpl<StocktakeMapper, Stocktake> {
             item.setDrugId(b.getDrugId());
             item.setBatchId(b.getId());
             item.setBookQuantity(b.getQuantity());
-            item.setActualQuantity(BigDecimal.ZERO);
+            // actualQuantity 保持 null：未录入实盘（确认前由 confirm 校验拦截，防漏录直接确认）
             item.setDiffQuantity(BigDecimal.ZERO);
             itemMapper.insert(item);
         }
         return st.getId();
     }
 
-    /** 录入实盘数量 */
+    /** 录入实盘数量（仅允许 status==0 的进行中盘点单） */
     public void updateActual(Long itemId, BigDecimal actualQuantity) {
         StocktakeItem item = itemMapper.selectById(itemId);
         if (item == null) {
             throw new BusinessException(ErrorCode.NOT_FOUND);
+        }
+        Stocktake st = this.getById(item.getTakeId());
+        if (st == null || st.getStatus() != 0) {
+            throw new BusinessException(ErrorCode.ORDER_STATUS_INVALID);
         }
         item.setActualQuantity(actualQuantity);
         item.setDiffQuantity(actualQuantity.subtract(item.getBookQuantity()));
         itemMapper.updateById(item);
     }
 
-    /** 确认盘点：对每条差异调用 StockService.adjustBatch（含乐观锁），生成盘点调整流水 */
+    /** 确认盘点：先校验全部明细已录入实盘，再对每条差异调用 StockService.adjustBatch（含乐观锁），生成盘点调整流水 */
     @Transactional
     public void confirm(Long takeId) {
         Stocktake st = this.getById(takeId);
@@ -85,6 +89,12 @@ public class StocktakeService extends ServiceImpl<StocktakeMapper, Stocktake> {
         }
         List<StocktakeItem> items = itemMapper.selectList(
                 new LambdaQueryWrapper<StocktakeItem>().eq(StocktakeItem::getTakeId, takeId));
+        // 防漏录：存在未录入实盘的明细时禁止确认
+        for (StocktakeItem item : items) {
+            if (item.getActualQuantity() == null) {
+                throw new BusinessException(ErrorCode.VALIDATE_ERROR, "存在未录入实盘的明细");
+            }
+        }
         for (StocktakeItem item : items) {
             if (item.getDiffQuantity().compareTo(BigDecimal.ZERO) != 0) {
                 stockService.adjustBatch(item.getDrugId(), st.getWarehouseId(), item.getBatchId(),

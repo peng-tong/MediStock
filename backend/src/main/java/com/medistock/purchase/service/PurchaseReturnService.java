@@ -1,6 +1,8 @@
 package com.medistock.purchase.service;
 
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.medistock.common.exception.BusinessException;
+import com.medistock.common.exception.ErrorCode;
 import com.medistock.inventory.service.StockService;
 import com.medistock.purchase.entity.PurchaseReturn;
 import com.medistock.purchase.entity.PurchaseReturnItem;
@@ -31,6 +33,9 @@ public class PurchaseReturnService extends ServiceImpl<PurchaseReturnMapper, Pur
 
     @Transactional
     public Long createReturn(PurchaseReturn ret, List<PurchaseReturnItem> items) {
+        if (items == null || items.isEmpty()) {
+            throw new BusinessException(ErrorCode.VALIDATE_ERROR, "明细不能为空");
+        }
         BigDecimal total = items.stream()
                 .map(i -> i.getReturnPrice().multiply(i.getQuantity()))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);

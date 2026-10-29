@@ -361,7 +361,7 @@ CREATE TABLE IF NOT EXISTS inv_stocktake (
     update_time DATETIME
 );
 
--- 库存：盘点明细
+-- 库存：盘点明细（actual_quantity 可空：创建时未录入实盘，确认前由服务层校验）
 CREATE TABLE IF NOT EXISTS inv_stocktake_item (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     tenant_id INTEGER NOT NULL,
@@ -369,7 +369,7 @@ CREATE TABLE IF NOT EXISTS inv_stocktake_item (
     drug_id INTEGER NOT NULL,
     batch_id INTEGER NOT NULL,
     book_quantity DECIMAL(18,4) NOT NULL,
-    actual_quantity DECIMAL(18,4) NOT NULL,
+    actual_quantity DECIMAL(18,4),
     diff_quantity DECIMAL(18,4) NOT NULL DEFAULT 0,
     deleted INTEGER NOT NULL DEFAULT 0,
     create_time DATETIME,

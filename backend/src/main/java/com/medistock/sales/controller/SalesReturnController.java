@@ -2,10 +2,13 @@ package com.medistock.sales.controller;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.medistock.common.exception.BusinessException;
+import com.medistock.common.exception.ErrorCode;
 import com.medistock.common.result.PageResult;
 import com.medistock.common.result.Result;
 import com.medistock.sales.entity.SalesReturn;
 import com.medistock.sales.service.SalesReturnService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -18,8 +21,8 @@ public class SalesReturnController {
     private final SalesReturnService service;
 
     @PostMapping
-    public Result<Long> create(@RequestBody SalesReturnCreateReq req) {
-        return Result.ok(service.createReturn(req.getOrder(), req.getItems()));
+    public Result<Long> create(@Valid @RequestBody SalesReturnCreateReq req) {
+        return Result.ok(service.createReturn(req.getSalesReturn(), req.getItems()));
     }
 
     @GetMapping
@@ -35,6 +38,10 @@ public class SalesReturnController {
 
     @GetMapping("/{id}")
     public Result<SalesReturn> detail(@PathVariable Long id) {
-        return Result.ok(service.getById(id));
+        SalesReturn ret = service.getById(id);
+        if (ret == null) {
+            throw new BusinessException(ErrorCode.NOT_FOUND);
+        }
+        return Result.ok(ret);
     }
 }
