@@ -6,12 +6,22 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.medistock.common.exception.BusinessException;
 import com.medistock.common.exception.ErrorCode;
 import com.medistock.system.entity.Tenant;
+import com.medistock.system.entity.User;
 import com.medistock.system.mapper.TenantMapper;
+import com.medistock.system.mapper.UserMapper;
 import org.springframework.stereotype.Service;
 
 /** 租户管理：创建/启停/最大用户数限制 */
 @Service
 public class TenantService extends ServiceImpl<TenantMapper, Tenant> {
+
+    private final UserMapper userMapper;
+
+    public TenantService(TenantMapper tenantMapper, UserMapper userMapper) {
+        // ServiceImpl 在 MP 3.5.7 无带参构造器，直接为 protected baseMapper 赋值
+        this.baseMapper = tenantMapper;
+        this.userMapper = userMapper;
+    }
 
     public Page<Tenant> pageQuery(int page, int pageSize, String keyword) {
         LambdaQueryWrapper<Tenant> qw = new LambdaQueryWrapper<>();
@@ -32,6 +42,10 @@ public class TenantService extends ServiceImpl<TenantMapper, Tenant> {
     /** 删除：仅允许无用户关联的租户 */
     public void deleteTenant(Long id) {
         getRequired(id);
+        // 租户下仍存在用户时禁止删除，防止孤儿用户数据
+        if (userMapper.selectCount(new LambdaQueryWrapper<User>().eq(User::getTenantId, id)) > 0) {
+            throw new BusinessException(ErrorCode.VALIDATE_ERROR, "租户下存在用户，禁止删除");
+        }
         removeById(id);
     }
 

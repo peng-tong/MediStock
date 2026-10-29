@@ -20,11 +20,11 @@ public class RoleController {
     public Result<List<Role>> list() { return Result.ok(roleService.listAll()); }
 
     @PostMapping
-    public Result<Void> create(@RequestBody Role role) { roleService.save(role); return Result.ok(); }
+    public Result<Void> create(@RequestBody Role role) { roleService.createRole(role); return Result.ok(); }
 
     @PutMapping("/{id}")
     public Result<Void> update(@PathVariable Long id, @RequestBody Role role) {
-        role.setId(id); roleService.updateById(role); return Result.ok();
+        role.setId(id); roleService.updateRole(role); return Result.ok();
     }
 
     @DeleteMapping("/{id}")

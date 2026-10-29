@@ -32,8 +32,18 @@ public class AuthInterceptor implements HandlerInterceptor {
         if (claims == null) {
             throw new BusinessException(ErrorCode.UNAUTHORIZED);
         }
-        Long userId = Long.valueOf(claims.getSubject());
+        Long userId;
+        try {
+            userId = Long.valueOf(claims.getSubject());
+        } catch (NumberFormatException e) {
+            // subject 非法（伪造/损坏），必须拒绝，防止 fail-open 全表放行
+            throw new BusinessException(ErrorCode.UNAUTHORIZED);
+        }
         Long tenantId = claims.get("tenantId", Long.class);
+        if (tenantId == null) {
+            // 缺少 tenantId claim 时拒绝：租户拦截器在上下文为空时按 0（超管）处理会全表放行
+            throw new BusinessException(ErrorCode.UNAUTHORIZED);
+        }
         String username = claims.get("username", String.class);
 
         // 写入请求上下文（UserContext 供业务取当前用户）

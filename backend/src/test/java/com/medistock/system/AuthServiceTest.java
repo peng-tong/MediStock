@@ -44,13 +44,14 @@ class AuthServiceTest {
             tenant.setMaxUserCount(10);
             tenantMapper.insert(tenant);
 
-            // 造一个属于该租户的用户
+            // createUser 非超管时强制注入当前租户，需切换到新租户上下文创建
+            TenantContext.setTenantId(tenant.getId());
             User u = new User();
-            u.setTenantId(tenant.getId());
             u.setUsername("auth_" + System.currentTimeMillis());
             userService.createUser(u, "pass123456");
 
-            // 预置验证码
+            // 预置验证码（login 为公开接口，模拟真实 HTTP 场景清空上下文）
+            TenantContext.clear();
             captchaStore.put("key1", "abcd");
 
             LoginReq req = new LoginReq();
@@ -76,5 +77,65 @@ class AuthServiceTest {
         req.setCaptchaCode("wrong");
         assertThatThrownBy(() -> authService.login(req))
                 .isInstanceOf(BusinessException.class);   // CAPTCHA_INVALID
+    }
+
+    /**
+     * B1 回归：两个租户存在同名用户时，login（公开接口、无租户上下文）不应 500，
+     * 而是全库匹配密码，各自密码都应能登录成功。
+     */
+    @Test
+    void login_sameUsernameDifferentTenants_ok() {
+        // 建两个启用状态的租户（sys_tenant 为平台表，任意上下文均可插入）
+        Tenant t1 = new Tenant();
+        t1.setName("同名租户A");
+        t1.setCode("ta" + System.currentTimeMillis());
+        t1.setStatus(1);
+        t1.setMaxUserCount(10);
+        tenantMapper.insert(t1);
+
+        Tenant t2 = new Tenant();
+        t2.setName("同名租户B");
+        t2.setCode("tb" + System.currentTimeMillis());
+        t2.setStatus(1);
+        t2.setMaxUserCount(10);
+        tenantMapper.insert(t2);
+
+        String dupUsername = "dup_" + System.currentTimeMillis();
+        try {
+            // 分别在两个租户上下文创建同名用户（createUser 非超管时强制注入当前租户）
+            TenantContext.setTenantId(t1.getId());
+            User u1 = new User();
+            u1.setUsername(dupUsername);
+            userService.createUser(u1, "pass-a");
+
+            TenantContext.setTenantId(t2.getId());
+            User u2 = new User();
+            u2.setUsername(dupUsername);
+            userService.createUser(u2, "pass-b");
+
+            // 用租户 A 用户的密码登录。login 是公开接口（无租户上下文），
+            // 测试需清空上下文模拟真实 HTTP 场景，否则残留上下文会被租户拦截器过滤
+            TenantContext.clear();
+            captchaStore.put("key3", "wxyz");
+            LoginReq req1 = new LoginReq();
+            req1.setUsername(dupUsername);
+            req1.setPassword("pass-a");
+            req1.setCaptchaKey("key3");
+            req1.setCaptchaCode("wxyz");
+            Map<String, Object> result1 = authService.login(req1);
+            assertThat(result1.get("token")).isNotNull();
+
+            // 用租户 B 用户的密码登录同样成功
+            captchaStore.put("key4", "mnop");
+            LoginReq req2 = new LoginReq();
+            req2.setUsername(dupUsername);
+            req2.setPassword("pass-b");
+            req2.setCaptchaKey("key4");
+            req2.setCaptchaCode("mnop");
+            Map<String, Object> result2 = authService.login(req2);
+            assertThat(result2.get("token")).isNotNull();
+        } finally {
+            TenantContext.clear();
+        }
     }
 }

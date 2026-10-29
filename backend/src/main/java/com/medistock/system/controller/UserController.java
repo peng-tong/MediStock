@@ -5,6 +5,7 @@ import com.medistock.common.result.PageResult;
 import com.medistock.common.result.Result;
 import com.medistock.system.entity.User;
 import com.medistock.system.service.UserService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -28,18 +29,23 @@ public class UserController {
     }
 
     @PostMapping
-    public Result<Void> create(@RequestBody UserCreateReq req) {
+    public Result<Void> create(@Valid @RequestBody UserCreateReq req) {
         userService.createUser(req.getUser(), req.getPassword());
         return Result.ok();
     }
 
     @PutMapping("/{id}")
     public Result<Void> update(@PathVariable Long id, @RequestBody User user) {
-        user.setId(id); userService.updateById(user); return Result.ok();
+        user.setId(id);
+        userService.updateUser(user);   // 禁止请求体覆写 tenant_id/password
+        return Result.ok();
     }
 
     @DeleteMapping("/{id}")
-    public Result<Void> delete(@PathVariable Long id) { userService.removeById(id); return Result.ok(); }
+    public Result<Void> delete(@PathVariable Long id) {
+        userService.deleteUser(id);     // 被角色引用时拒绝删除
+        return Result.ok();
+    }
 
     @PutMapping("/{id}/status")
     public Result<Void> changeStatus(@PathVariable Long id, @RequestParam Integer status) {
@@ -47,8 +53,10 @@ public class UserController {
     }
 
     @PutMapping("/{id}/password/reset")
-    public Result<Void> resetPassword(@PathVariable Long id, @RequestParam(defaultValue = "123456") String password) {
-        userService.resetPassword(id, password); return Result.ok();
+    public Result<Void> resetPassword(@PathVariable Long id, @Valid @RequestBody ResetPasswordReq req) {
+        // 明文密码改走 body，避免进入访问日志
+        userService.resetPassword(id, req.getPassword());
+        return Result.ok();
     }
 
     @PutMapping("/{id}/roles")
