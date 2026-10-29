@@ -5,16 +5,18 @@ import com.medistock.common.result.PageResult;
 import com.medistock.common.result.Result;
 import com.medistock.sales.entity.SalesOrder;
 import com.medistock.sales.service.SalesOrderService;
+import com.medistock.sales.service.SalesOutboundService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
-/** 销售单接口：创建（头+明细）/ 分页 / 详情 / 删除（仅草稿） */
+/** 销售单接口：创建（头+明细）/ 分页 / 详情 / 删除（仅草稿）/ 出库 */
 @RestController
 @RequestMapping("/api/sales/orders")
 @RequiredArgsConstructor
 public class SalesOrderController {
 
     private final SalesOrderService service;
+    private final SalesOutboundService outboundService;
 
     @PostMapping
     public Result<Long> create(@RequestBody SalesOrderCreateReq req) {
@@ -38,6 +40,12 @@ public class SalesOrderController {
     @DeleteMapping("/{id}")
     public Result<Void> delete(@PathVariable Long id) {
         service.deleteOrder(id);
+        return Result.ok();
+    }
+
+    @PostMapping("/{id}/outbound")
+    public Result<Void> outbound(@PathVariable Long id) {
+        outboundService.outbound(id);
         return Result.ok();
     }
 }

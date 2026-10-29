@@ -13,11 +13,11 @@ import com.medistock.inventory.entity.StockBatch;
 import com.medistock.inventory.mapper.InventoryFlowMapper;
 import com.medistock.inventory.mapper.StockBatchMapper;
 import com.medistock.inventory.mapper.StockMapper;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
@@ -37,13 +37,25 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class StockService {
 
     private final StockMapper stockMapper;
     private final StockBatchMapper batchMapper;
     private final InventoryFlowMapper flowMapper;
     private final TransactionTemplate transactionTemplate;
+
+    public StockService(StockMapper stockMapper, StockBatchMapper batchMapper,
+                        InventoryFlowMapper flowMapper, TransactionTemplate transactionTemplate) {
+        this.stockMapper = stockMapper;
+        this.batchMapper = batchMapper;
+        this.flowMapper = flowMapper;
+        // 嵌套事务（savepoint）：无外层事务时行为等同 REQUIRED（新建事务）；
+        // 有外层事务（如销售出库 @Transactional 包住多行扣减）时，乐观锁冲突回滚到 savepoint 而非
+        // 标记整个事务 rollback-only，使 retry 在参与事务场景下仍可成功
+        // （否则参与事务被标记 rollbackOnly 后，最终 commit 抛 UnexpectedRollbackException，并发出库必然失败）
+        transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_NESTED);
+        this.transactionTemplate = transactionTemplate;
+    }
 
     private static final AtomicLong SEQ = new AtomicLong();
 
