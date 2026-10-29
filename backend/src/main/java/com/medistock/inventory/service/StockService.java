@@ -1,6 +1,7 @@
 package com.medistock.inventory.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.medistock.common.config.TenantContext;
 import com.medistock.common.config.UserContext;
 import com.medistock.common.constant.BizConstant;
@@ -57,7 +58,7 @@ public class StockService {
                 batch = newBatch(drugId, warehouseId, batchNo, expiryDate, qty);
             } else {
                 batch.setQuantity(batch.getQuantity().add(qty));
-                batchMapper.updateById(batch);   // 乐观锁生效
+                updateWithVersion(batchMapper, batch);   // 乐观锁生效
             }
             adjustStock(drugId, warehouseId, qty, businessNo,
                     BizConstant.FLOW_INBOUND, batch, remark);
@@ -84,7 +85,7 @@ public class StockService {
                 if (remaining.compareTo(BigDecimal.ZERO) <= 0) break;
                 BigDecimal take = b.getQuantity().min(remaining);
                 b.setQuantity(b.getQuantity().subtract(take));
-                batchMapper.updateById(b);    // 乐观锁生效
+                updateWithVersion(batchMapper, b);    // 乐观锁生效
                 adjustStock(drugId, warehouseId, take.negate(), businessNo,
                         BizConstant.FLOW_OUTBOUND, b, remark);
                 remaining = remaining.subtract(take);
@@ -105,7 +106,7 @@ public class StockService {
                 throw new BusinessException(ErrorCode.NOT_FOUND, "批次不存在");
             }
             batch.setQuantity(batch.getQuantity().add(qty));
-            batchMapper.updateById(batch);
+            updateWithVersion(batchMapper, batch);
             adjustStock(drugId, warehouseId, qty, businessNo,
                     BizConstant.FLOW_SALES_RETURN, batch, remark);
             return null;
@@ -124,7 +125,7 @@ public class StockService {
                 throw new BusinessException(ErrorCode.STOCK_INSUFFICIENT);
             }
             batch.setQuantity(batch.getQuantity().subtract(qty));
-            batchMapper.updateById(batch);
+            updateWithVersion(batchMapper, batch);
             adjustStock(drugId, warehouseId, qty.negate(), businessNo,
                     BizConstant.FLOW_PURCHASE_RETURN, batch, remark);
             return null;
@@ -143,7 +144,7 @@ public class StockService {
                 throw new BusinessException(ErrorCode.VALIDATE_ERROR, "盘亏超过批次库存");
             }
             batch.setQuantity(batch.getQuantity().add(diffQty));
-            batchMapper.updateById(batch);
+            updateWithVersion(batchMapper, batch);
             adjustStock(drugId, warehouseId, diffQty, businessNo,
                     BizConstant.FLOW_STOCKTAKE, batch, remark);
             return null;
@@ -151,6 +152,16 @@ public class StockService {
     }
 
     // ==================== 内部实现 ====================
+
+    /**
+     * 乐观锁更新：MP 3.5.7 的 updateById 在 version 冲突（影响 0 行）时仅返回 false 而不抛异常，
+     * 必须显式检查返回值，冲突时抛 OptimisticLockingFailureException 交由外层 retry 重读重试。
+     */
+    private <T> void updateWithVersion(BaseMapper<T> mapper, T entity) {
+        if (mapper.updateById(entity) == 0) {
+            throw new OptimisticLockingFailureException("乐观锁版本冲突");
+        }
+    }
 
     /** 事务模板包装的重试循环（乐观锁冲突 / 唯一键冲突 → 重读重试） */
     private void retry(Runnable action) {
@@ -184,7 +195,7 @@ public class StockService {
         } else {
             stock.setQuantity(stock.getQuantity().add(changeQty));
             stock.setAvailableQuantity(stock.getAvailableQuantity().add(changeQty));
-            stockMapper.updateById(stock);   // 乐观锁生效
+            updateWithVersion(stockMapper, stock);   // 乐观锁生效
         }
         insertFlow(businessType, businessNo, drugId, warehouseId, batch,
                 changeQty, remark);

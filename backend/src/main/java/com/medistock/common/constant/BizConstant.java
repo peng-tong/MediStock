@@ -16,8 +16,8 @@ public final class BizConstant {
     public static final int FLOW_STOCKTAKE = 5;    // 盘点调整
     public static final int FLOW_TRANSFER = 6;     // 调拨（P1 预留）
 
-    /** 乐观锁最大重试次数 */
-    public static final int MAX_RETRY = 5;
+    /** 乐观锁最大重试次数（并发抢同一行时每轮仅 1 个赢家，10 线程场景需要更多轮次） */
+    public static final int MAX_RETRY = 20;
 
     /** 单号前缀 */
     public static final String PREFIX_PO = "PO";  // 采购单
