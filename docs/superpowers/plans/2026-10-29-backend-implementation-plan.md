@@ -12,6 +12,19 @@
 
 ## 0. 前置约定（每个 Task 都要遵守）
 
+### 0.0 本机构建环境（重要）
+
+本机默认 JAVA_HOME 指向 JDK 1.8、默认 Maven 是 3.6.1，**均无法构建 Spring Boot 3**。所有 Maven 命令必须改用：
+
+```powershell
+# 统一构建前缀（PowerShell）：
+$env:JAVA_HOME='C:\Program Files\Java\jdk-17.0.11'
+& 'D:\apache-maven-3.9.9\bin\mvn.cmd' <参数>
+```
+
+示例：`cd backend; $env:JAVA_HOME='C:\Program Files\Java\jdk-17.0.11'; & 'D:\apache-maven-3.9.9\bin\mvn.cmd' test -Dtest=XXX`
+下文所有 `mvn ...` 命令均指代上面的前缀写法。
+
 ### 0.1 引用设计文档
 实体字段定义、接口清单、业务流程均以项目根目录 [`后端设计文档.md`](../../后端设计文档.md) 为准。本文只列出**字段增量**（如 `version` 乐观锁字段、关联表 `tenant_id` 补充）和实现要点，不再重复字段表。
 
