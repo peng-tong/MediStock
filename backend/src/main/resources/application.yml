@@ -4,11 +4,12 @@ server:
 spring:
   datasource:
     driver-class-name: org.sqlite.JDBC
-    url: jdbc:sqlite:./data/medistock.db
+    # SQLite PRAGMA 通过 JDBC URL 参数设置：connection-init-sql 多语句会被 sqlite-jdbc 静默丢弃，导致外键不生效
+    # WAL 提升并发读，busy_timeout 避免写锁冲突立刻报错，foreign_keys=on 保证外键约束
+    url: jdbc:sqlite:./data/medistock.db?journal_mode=WAL&busy_timeout=5000&foreign_keys=on
     hikari:
-      # SQLite 单写者：连接池串行写，WAL 提高并发读，busy_timeout 避免立刻报错
+      # SQLite 单写者：连接池串行写
       maximum-pool-size: 10
-      connection-init-sql: "PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000; PRAGMA foreign_keys=ON;"
   jackson:
     date-format: yyyy-MM-dd HH:mm:ss
     time-zone: GMT+8
@@ -26,7 +27,7 @@ mybatis-plus:
       # 主键自增
       id-type: auto
 
-# JWT 密钥（demo 写死，生产应环境变量注入）
+# JWT 密钥：默认值为随机生成的强密钥，生产环境务必用环境变量 JWT_SECRET 覆盖
 jwt:
-  secret: medistock-demo-secret-key-please-change
+  secret: ${JWT_SECRET:wRut+ppOLRV5ZQ7d2tdgE1v6aFOt8zPOZ+BsGavjl+Zl0zsOTRJGUjB4rtLYtBDH}
   expire-hours: 24
