@@ -2,6 +2,7 @@ package com.medistock.inventory;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.medistock.common.config.TenantContext;
+import com.medistock.common.exception.BusinessException;
 import com.medistock.inventory.entity.Stock;
 import com.medistock.inventory.entity.StockBatch;
 import com.medistock.inventory.entity.Stocktake;
@@ -21,6 +22,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @SpringBootTest
 @ActiveProfiles("test")
@@ -71,6 +73,28 @@ class StocktakeServiceTest {
 
             Stocktake st = stocktakeService.getById(takeId);
             assertThat(st.getStatus()).isEqualTo(1);
+        } finally {
+            TenantContext.clear();
+        }
+    }
+
+    @Test
+    void confirm_withoutActual_isRejected() {
+        TenantContext.setTenantId(1L);
+        try {
+            // 先入库 100 产生账面数
+            stockService.inbound(DRUG_ID, WH_ID, "B9", LocalDate.now().plusDays(100),
+                    new BigDecimal("100"), "PO-T", "盘点测试准备");
+
+            Long takeId = stocktakeService.createStocktake(WH_ID, "测试盘点");
+            // 不调用 updateActual 直接确认 → 防漏录拦截
+            assertThatThrownBy(() -> stocktakeService.confirm(takeId))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessage("存在未录入实盘的明细");
+
+            // 确认被拒后盘点单仍为进行中
+            Stocktake st = stocktakeService.getById(takeId);
+            assertThat(st.getStatus()).isEqualTo(0);
         } finally {
             TenantContext.clear();
         }

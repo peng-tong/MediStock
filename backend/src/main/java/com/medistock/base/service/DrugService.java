@@ -13,6 +13,7 @@ import com.medistock.inventory.mapper.StockMapper;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 /** 药品档案：分页查询 / 增删改（有库存时禁止删除的防呆校验） */
 @Service
@@ -58,9 +59,13 @@ public class DrugService extends ServiceImpl<DrugMapper, Drug> {
 
     /** 删除药品：存在库存时禁止删除（防呆校验） */
     public void deleteDrug(Long id) {
-        Stock stock = stockMapper.selectOne(new LambdaQueryWrapper<Stock>()
+        // inv_stock 唯一键为 tenant+drug+warehouse，多仓库存行是常态，selectOne 会抛 TooManyResultsException，
+        // 改为 selectList 后任一仓库有库存（数量 > 0）即拦截删除
+        List<Stock> stocks = stockMapper.selectList(new LambdaQueryWrapper<Stock>()
                 .eq(Stock::getDrugId, id));
-        if (stock != null && stock.getQuantity().compareTo(BigDecimal.ZERO) > 0) {
+        boolean hasStock = stocks.stream().anyMatch(s -> s.getQuantity() != null
+                && s.getQuantity().compareTo(BigDecimal.ZERO) > 0);
+        if (hasStock) {
             throw new BusinessException(ErrorCode.DRUG_IN_STOCK);
         }
         removeById(id);

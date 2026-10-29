@@ -67,6 +67,10 @@ public class StocktakeService extends ServiceImpl<StocktakeMapper, Stocktake> {
 
     /** 录入实盘数量（仅允许 status==0 的进行中盘点单） */
     public void updateActual(Long itemId, BigDecimal actualQuantity) {
+        // 入口防呆：实盘数量为空时直接拦截，避免后续 NPE（bookQuantity 相减）
+        if (actualQuantity == null) {
+            throw new BusinessException(ErrorCode.VALIDATE_ERROR, "实盘数量不能为空");
+        }
         StocktakeItem item = itemMapper.selectById(itemId);
         if (item == null) {
             throw new BusinessException(ErrorCode.NOT_FOUND);

@@ -64,7 +64,7 @@ public class StockService {
     public void inbound(Long drugId, Long warehouseId, String batchNo, LocalDate expiryDate,
                         BigDecimal qty, String businessNo, String remark) {
         if (qty == null || qty.compareTo(BigDecimal.ZERO) <= 0) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "入库数量必须大于 0");
+            throw new BusinessException(ErrorCode.VALIDATE_ERROR, "入库数量必须大于 0");
         }
         retry(() -> transactionTemplate.execute(status -> {
             StockBatch batch = findBatch(drugId, warehouseId, batchNo);
@@ -84,7 +84,7 @@ public class StockService {
     public void outboundFifo(Long drugId, Long warehouseId, BigDecimal qty,
                              String businessNo, String remark) {
         if (qty.compareTo(BigDecimal.ZERO) <= 0) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "出库数量必须大于 0");
+            throw new BusinessException(ErrorCode.VALIDATE_ERROR, "出库数量必须大于 0");
         }
         retry(() -> transactionTemplate.execute(status -> {
             BigDecimal remaining = qty;
@@ -161,6 +161,10 @@ public class StockService {
             StockBatch batch = batchMapper.selectById(batchId);
             if (batch == null) {
                 throw new BusinessException(ErrorCode.NOT_FOUND, "批次不存在");
+            }
+            // 批次归属校验：防跨药品/跨仓库误调（脏数据或参数错配时直接拦截，与 restockBatch/deductBatch 口径一致）
+            if (!batch.getDrugId().equals(drugId) || !batch.getWarehouseId().equals(warehouseId)) {
+                throw new BusinessException(ErrorCode.VALIDATE_ERROR, "批次与药品/仓库不匹配");
             }
             if (batch.getQuantity().add(diffQty).compareTo(BigDecimal.ZERO) < 0) {
                 throw new BusinessException(ErrorCode.VALIDATE_ERROR, "盘亏超过批次库存");
