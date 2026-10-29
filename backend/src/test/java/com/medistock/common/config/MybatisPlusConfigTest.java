@@ -87,8 +87,8 @@ class MybatisPlusConfigTest {
         demoMapper.deleteById(d1.getId());
         assertThat(demoMapper.selectById(d1.getId())).isNull();
 
-        // 清理测试数据
-        TenantContext.setTenantId(1L);
+        // 清理测试数据：d2 属于租户 2，需切换到租户 2 上下文才能删掉（租户拦截器会追加 tenant_id 条件）
+        TenantContext.setTenantId(2L);
         demoMapper.deleteById(d2.getId());
     }
 }
