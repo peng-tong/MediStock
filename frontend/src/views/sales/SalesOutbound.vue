@@ -51,8 +51,8 @@ const columns = [
   { title: '药品明细', key: 'drugNames', render: (r) => r.drugNames || (r.items || []).map(i => i.drugName).join('、') || '-' },
   { title: '金额', key: 'totalAmount', render: (r) => fmtMoney(r.totalAmount) },
   { title: '状态', key: 'status', width: '90px', tag: (r) => statusTag(Number(r.status)) },
-  { title: '日期', key: 'createTime', className: 'dim' },
-  { title: '开单人', key: 'createBy', className: 'dim' }
+  { title: '日期', key: 'createTime', className: 'dim', render: (r) => String(r.createTime || '').slice(0, 10) },
+  { title: '开单人', key: 'createByName', className: 'dim' }
 ]
 
 // 拉取列表（失败时 DataTable 自动回退 mock）

@@ -8,10 +8,12 @@
 
     <DataTable ref="tableRef" :columns="columns" :fetch="fetchData" :mock="mockData" :query="query">
       <template #actions="{ row }">
-        <!-- 待出库状态可直接出库（FIFO 按批次扣减） -->
-        <button v-if="[1, 2].includes(Number(row.status))" class="btn btn-sm" @click="outbound(row)">出库</button>
-        <button class="btn btn-sm" @click="openForm(row)">编辑</button>
-        <button class="btn btn-sm-danger" @click="remove(row)">删除</button>
+        <!-- 草稿先提交为待出库，之后才可出库 -->
+        <button v-if="Number(row.status) === 0" class="btn btn-sm" @click="submit(row)">提交</button>
+        <!-- 待出库(1)才可出库（FIFO 按批次扣减）；草稿需先提交 -->
+        <button v-if="Number(row.status) === 1" class="btn btn-sm" @click="outbound(row)">出库</button>
+        <button v-if="Number(row.status) === 0" class="btn btn-sm" @click="openForm(row)">编辑</button>
+        <button v-if="Number(row.status) === 0" class="btn btn-sm-danger" @click="remove(row)">删除</button>
       </template>
     </DataTable>
 
@@ -37,7 +39,7 @@
         <div class="f-item"><label>销售员</label><input v-model.trim="form.salesman" placeholder="销售员"></div>
         <div class="f-item">
           <label>出库仓库</label>
-          <select v-model="form.warehouseId">
+          <select v-model="form.warehouseId" @change="refreshAllBatches">
             <option :value="null" disabled>请选择仓库</option>
             <option v-for="w in warehouseOptions" :key="w.id" :value="w.id">{{ w.name }}</option>
           </select>
@@ -49,23 +51,24 @@
       <div class="tbl-wrap" style="margin-top:16px">
         <table class="tbl">
           <thead>
-            <tr><th>药品</th><th>选择批号</th><th>有效期</th><th>数量</th><th>单价</th><th>折扣</th><th>金额</th><th style="width:1%"></th></tr>
+            <!-- 批号不再由用户选择：后端出库按效期优先 FIFO 自动扣批次，这里展示真实可用批次供参考 -->
+            <tr><th>药品</th><th>可出库批次（效期优先）</th><th>数量</th><th>单价</th><th>折扣</th><th>金额</th><th style="width:1%"></th></tr>
           </thead>
           <tbody>
             <tr v-for="(it, i) in form.items" :key="i">
               <td>
-                <select v-model="it.drugId" style="height:32px;border:1.5px solid var(--line);border-radius:8px;padding:0 8px;font-size:12.5px;width:180px">
+                <select v-model="it.drugId" style="height:32px;border:1.5px solid var(--line);border-radius:8px;padding:0 8px;font-size:12.5px;width:180px" @change="loadBatches(it)">
                   <option :value="null" disabled>请选择药品</option>
                   <option v-for="d in drugOptions" :key="d.id" :value="d.id">{{ d.genericName }} {{ d.spec || '' }}</option>
                 </select>
               </td>
-              <td>
-                <select v-model="it.batchNo" style="height:32px;border:1.5px solid var(--line);border-radius:8px;padding:0 8px;font-size:12.5px;width:150px">
-                  <option value="" disabled>选择批号</option>
-                  <option v-for="b in batchOptions" :key="b.batchNo" :value="b.batchNo">{{ b.batchNo }}</option>
-                </select>
+              <td style="font-size:12px;line-height:1.6;color:var(--muted);white-space:normal;max-width:240px">
+                <div>{{ batchText(it) }}</div>
+                <!-- 可用库存合计（仅未过期批次）；超量仅提示，保存不拦截，出库时后端会拦截 -->
+                <div v-if="it.drugId" style="margin-top:4px" :style="{ color: overStock(it) ? 'var(--danger)' : 'var(--muted)' }">
+                  可用库存 {{ availableQty(it) }} 盒<template v-if="overStock(it)"> · 已超出，出库时将被拦截</template>
+                </div>
               </td>
-              <td class="mono">{{ expiryOf(it.batchNo) }}</td>
               <td><input type="number" min="0" v-model.number="it.quantity" style="width:64px;height:32px;border:1.5px solid var(--line);border-radius:8px;padding:0 8px;text-align:center"></td>
               <td><input type="number" min="0" v-model.number="it.salePrice" style="width:76px;height:32px;border:1.5px solid var(--line);border-radius:8px;padding:0 8px;text-align:center"></td>
               <td><input type="number" min="0" step="0.01" v-model.number="it.discount" placeholder="如 0.95" style="width:64px;height:32px;border:1.5px solid var(--line);border-radius:8px;padding:0 8px;text-align:center"></td>
@@ -103,9 +106,10 @@ import PageCard from '../../components/PageCard.vue'
 import DataTable from '../../components/DataTable.vue'
 import Modal from '../../components/Modal.vue'
 import {
-  getSalesOrders, createSalesOrder, updateSalesOrder, deleteSalesOrder, outboundSalesOrder, getCustomerOptions
+  getSalesOrders, getSalesOrder, createSalesOrder, updateSalesOrder, deleteSalesOrder, submitSalesOrder, outboundSalesOrder, getCustomerOptions
 } from '../../api/sales'
 import { getWarehouseOptions, getDrugOptions } from '../../api/purchase'
+import { getStockBatches } from '../../api/inventory'
 import { notifySuccess, notifyError } from '../../utils/notify'
 
 const tableRef = ref()
@@ -138,8 +142,8 @@ const columns = [
   { title: '金额', key: 'totalAmount', render: (r) => fmtMoney(r.totalAmount) },
   { title: '优惠', key: 'discountAmount', render: (r) => `- ${fmtMoney(r.discountAmount)}` },
   { title: '状态', key: 'status', width: '90px', tag: (r) => statusTag(Number(r.status)) },
-  { title: '日期', key: 'createTime', className: 'dim' },
-  { title: '开单人', key: 'createBy', className: 'dim' }
+  { title: '日期', key: 'createTime', className: 'dim', render: (r) => String(r.createTime || '').slice(0, 10) },
+  { title: '开单人', key: 'createByName', className: 'dim' }
 ]
 
 // 拉取列表（失败时 DataTable 自动回退 mock）
@@ -160,12 +164,6 @@ const mockData = [
 const customerOptions = ref([])
 const warehouseOptions = ref([])
 const drugOptions = ref([])
-// 静态批次 mock 数组（演示用）
-const batchOptions = [
-  { batchNo: 'A20250812', expiryDate: '2027-08-12' },
-  { batchNo: 'B20250903', expiryDate: '2027-09-03' },
-  { batchNo: 'L20251002', expiryDate: '2026-11-20' }
-]
 
 async function loadOptions() {
   try {
@@ -207,25 +205,37 @@ function genOrderNo() {
   return `SO-${todayStr().replace(/-/g, '')}-001`
 }
 
-function openForm(row) {
+// 新增为空表单；编辑时先请求详情接口，列表行不含明细，需回查后再回填
+async function openForm(row) {
+  let detail = row
+  if (row) {
+    try {
+      detail = await getSalesOrder(row.id) || row
+    } catch (e) {
+      detail = row // 详情接口异常时退回列表行
+    }
+  }
+  const items = (detail && detail.items) || []
   Object.assign(form, {
-    id: row ? row.id : null,
-    customerId: row ? row.customerId ?? null : null,
-    warehouseId: row ? row.warehouseId ?? null : null,
-    saleDate: row ? (row.createTime || todayStr()) : todayStr(),
-    settlementType: row ? row.settlementType || '现结' : '现结',
-    salesman: row ? row.salesman || '' : '',
+    id: detail ? detail.id : null,
+    customerId: detail ? detail.customerId ?? null : null,
+    warehouseId: detail ? detail.warehouseId ?? null : null,
+    saleDate: detail ? String(detail.createTime || todayStr()).slice(0, 10) : todayStr(),
+    settlementType: detail ? detail.settlementType || '现结' : '现结',
+    salesman: detail ? detail.salesman || '' : '',
     orderNo: genOrderNo(),
-    remark: row ? row.remark || '' : '',
-    items: row && row.items && row.items.length
-      ? row.items.map(it => ({ drugId: it.drugId, batchNo: it.batchNo || '', quantity: it.quantity, salePrice: it.salePrice ?? 0, discount: 1 }))
-      : [{ drugId: null, batchNo: '', quantity: 1, salePrice: 0, discount: 1 }]
+    remark: detail ? detail.remark || '' : '',
+    items: items.length
+      ? items.map(it => ({ drugId: it.drugId, quantity: it.quantity, salePrice: it.salePrice ?? 0, discount: 1, batches: [] }))
+      : [{ drugId: null, quantity: 1, salePrice: 0, discount: 1, batches: [] }]
   })
   formVisible.value = true
+  // 编辑回填后按已有药品加载真实批次库存
+  form.items.forEach(it => loadBatches(it))
 }
 
 function addRow() {
-  form.items.push({ drugId: null, batchNo: '', quantity: 1, salePrice: 0, discount: 1 })
+  form.items.push({ drugId: null, quantity: 1, salePrice: 0, discount: 1, batches: [] })
 }
 function removeRow(i) {
   if (form.items.length > 1) form.items.splice(i, 1)
@@ -234,13 +244,53 @@ function removeRow(i) {
 // 折扣系数：0.95 直接作系数；>1 视为百分比（如 95 → 0.95）
 function discountFactor(d) {
   const n = Number(d)
+  // 空值 / 1 表示无折扣；0<n<=1 视为系数（0.95 = 95 折）；>1 视为百分比（95 = 95 折）
   if (!n) return 1
-  return n >= 1 ? n / 100 : n
+  return n > 1 ? n / 100 : n
 }
-// 选中批号对应的有效期
-function expiryOf(batchNo) {
-  const b = batchOptions.find(x => x.batchNo === batchNo)
-  return b ? b.expiryDate : '-'
+// 选中药品/仓库后，从批次库存接口加载真实可出库批次（仅展示，出库仍由后端 FIFO 扣减）
+async function loadBatches(it) {
+  it.batches = []
+  if (!it.drugId) return
+  try {
+    const data = await getStockBatches({
+      drugId: it.drugId,
+      warehouseId: form.warehouseId || undefined,
+      page: 1,
+      pageSize: 100
+    })
+    const today = todayStr()
+    it.batches = ((data && data.list) || [])
+      // 过滤零库存与已过期批次，并按有效期升序（即 FIFO 出库顺序）
+      .filter(b => (Number(b.quantity) || 0) > 0 && String(b.expiryDate || '').slice(0, 10) >= today)
+      .sort((a, b) => String(a.expiryDate || '').localeCompare(String(b.expiryDate || '')))
+  } catch (e) {
+    it.batches = []
+  }
+}
+
+// 仓库变更时，重新拉取所有明细行的批次（批次按仓库维度存放）
+function refreshAllBatches() {
+  form.items.forEach(it => loadBatches(it))
+}
+
+// 可用库存合计（仅统计未过期批次，与后端出库过滤条件保持一致）
+function availableQty(it) {
+  return (it.batches || []).reduce((s, b) => s + (Number(b.quantity) || 0), 0)
+}
+
+// 明细数量是否超过可用库存（仅作界面提示，保存不做拦截）
+function overStock(it) {
+  return !!it.drugId && (Number(it.quantity) || 0) > availableQty(it)
+}
+
+// 批次展示文案：显示前两个 FIFO 批次（批号/有效期/可用数量）
+function batchText(it) {
+  if (!it.drugId) return '-'
+  if (!it.batches || !it.batches.length) return '无可用批次'
+  const list = it.batches.slice(0, 2)
+    .map(b => `${b.batchNo}（${String(b.expiryDate || '').slice(0, 10)}，${Number(b.quantity) || 0}盒）`)
+  return list.join('；') + (it.batches.length > 2 ? ` 等 ${it.batches.length} 批` : '')
 }
 // 单行金额 = 数量 × 单价 × 折扣系数（保留 2 位）
 function lineAmount(it) {
@@ -289,6 +339,17 @@ async function save() {
     tableRef.value.reload()
   } catch (e) {
     notifyError(e.message || '保存失败')
+  }
+}
+
+// 提交销售单：草稿 → 待出库，提交后不可再编辑/删除，可执行出库
+async function submit(row) {
+  try {
+    await submitSalesOrder(row.id)
+    notifySuccess('已提交，等待出库')
+    tableRef.value.reload()
+  } catch (e) {
+    notifyError(e.message || '提交失败')
   }
 }
 

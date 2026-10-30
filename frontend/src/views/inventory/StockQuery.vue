@@ -4,49 +4,7 @@
     <PageCard title="库存查询" desc="实时库存 · 批号维度汇总 / 低于下限自动预警">
     </PageCard>
 
-    <!-- 统计卡（值来自 mock 求和，静态写死） -->
-    <div class="stat-grid">
-      <div class="stat-card">
-        <div class="stat-ico teal">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 9l8-5 8 5v11H4z"/><path d="M4 9h16"/><path d="M12 9v11"/></svg>
-        </div>
-        <div>
-          <div class="lbl">库存总额</div>
-          <div class="val">2,112</div>
-          <div class="trend" style="color:var(--muted)">在库数量合计（盒）</div>
-        </div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-ico blue">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/></svg>
-        </div>
-        <div>
-          <div class="lbl">在库批次</div>
-          <div class="val">6</div>
-          <div class="trend" style="color:var(--muted)">当前有效批次</div>
-        </div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-ico red">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3L2.5 19h19z"/><path d="M12 9.5v4.5M12 17.5v.1"/></svg>
-        </div>
-        <div>
-          <div class="lbl">低于下限</div>
-          <div class="val">1</div>
-          <div class="trend down">急需补货品种</div>
-        </div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-ico amber">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10 4h4a6 6 0 0 1 0 12h-4a6 6 0 0 1 0-12z"/><path d="M10 4v12"/></svg>
-        </div>
-        <div>
-          <div class="lbl">库存品种</div>
-          <div class="val">6</div>
-          <div class="trend" style="color:var(--muted)">在库药品品种数</div>
-        </div>
-      </div>
-    </div>
+    <!-- 顶部统计卡为原型静态数据，后端暂无汇总接口，先屏蔽 -->
 
     <!-- 查询工具栏 -->
     <div class="toolbar">
@@ -86,7 +44,8 @@ const columns = [
   { title: '库存数量', key: 'quantity', align: 'center' },
   { title: '可用数量', key: 'availableQuantity', align: 'center' },
   { title: '库存下限', key: 'minStock', className: 'dim', align: 'center' },
-  { title: '更新时间', key: 'updateTime', className: 'dim', width: '150px' }
+  { title: '更新时间', key: 'updateTime', className: 'dim', width: '150px',
+    render: (r) => String(r.updateTime || '').slice(0, 16).replace('T', ' ') }
 ]
 
 // 拉取接口：异常时由 DataTable 回退 mock

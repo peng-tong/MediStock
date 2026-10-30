@@ -9,6 +9,7 @@
     <!-- 状态筛选 chips（全部 / 待审核 / 已入库 / 已驳回） -->
     <div class="filters">
       <span class="chip" :class="{ active: query.status === '' }" @click="query.status = ''">全部</span>
+      <span class="chip" :class="{ active: query.status === '0' }" @click="query.status = '0'">草稿</span>
       <span class="chip" :class="{ active: query.status === '1' }" @click="query.status = '1'">待审核</span>
       <span class="chip" :class="{ active: query.status === '3' }" @click="query.status = '3'">已入库</span>
       <span class="chip" :class="{ active: query.status === '4' }" @click="query.status = '4'">已驳回</span>
@@ -16,10 +17,15 @@
 
     <DataTable ref="tableRef" :columns="columns" :fetch="fetchData" :mock="mockData" :query="query">
       <template #actions="{ row }">
-        <!-- 待审核 / 待入库状态可跳转采购入库流程 -->
-        <button v-if="[1, 2].includes(Number(row.status))" class="btn btn-sm" @click="router.push('/purchase/inbound')">入库</button>
-        <button class="btn btn-sm" @click="openForm(row)">编辑</button>
-        <button class="btn btn-sm-danger" @click="remove(row)">删除</button>
+        <!-- 草稿：提交为待审核 -->
+        <button v-if="Number(row.status) === 0" class="btn btn-sm" @click="submit(row)">提交</button>
+        <!-- 待审核：审核通过（进入待入库）或驳回 -->
+        <button v-if="Number(row.status) === 1" class="btn btn-sm" @click="approve(row)">审核通过</button>
+        <button v-if="Number(row.status) === 1" class="btn btn-sm-danger" @click="reject(row)">驳回</button>
+        <!-- 仅审核通过（待入库）才可入库 -->
+        <button v-if="Number(row.status) === 2" class="btn btn-sm" @click="router.push('/purchase/inbound')">入库</button>
+        <button v-if="Number(row.status) === 0" class="btn btn-sm" @click="openForm(row)">编辑</button>
+        <button v-if="Number(row.status) === 0" class="btn btn-sm-danger" @click="remove(row)">删除</button>
       </template>
     </DataTable>
 
@@ -93,7 +99,8 @@ import PageCard from '../../components/PageCard.vue'
 import DataTable from '../../components/DataTable.vue'
 import Modal from '../../components/Modal.vue'
 import {
-  getPurchaseOrders, createPurchaseOrder, updatePurchaseOrder, deletePurchaseOrder,
+  getPurchaseOrders, getPurchaseOrder, createPurchaseOrder, updatePurchaseOrder, deletePurchaseOrder,
+  submitPurchaseOrder, approvePurchaseOrder, rejectPurchaseOrder,
   getSupplierOptions, getWarehouseOptions, getDrugOptions
 } from '../../api/purchase'
 import { notifySuccess, notifyError } from '../../utils/notify'
@@ -112,14 +119,14 @@ function todayStr() {
   const d = new Date()
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
-// 状态映射：0 草稿 / 1 待审核 / 2 待入库 / 3 已入库 / 4 已取消
+// 状态映射：0 草稿 / 1 待审核 / 2 待入库 / 3 已入库 / 4 已驳回
 function statusTag(s) {
   const map = {
     0: { type: 'gray', text: '草稿' },
     1: { type: 'warn', text: '待审核' },
     2: { type: 'warn', text: '待入库' },
     3: { type: 'ok', text: '已入库' },
-    4: { type: 'gray', text: '已取消' }
+    4: { type: 'gray', text: '已驳回' }
   }
   return map[s] || { type: 'gray', text: '未知' }
 }
@@ -132,8 +139,8 @@ const columns = [
   { title: '金额', key: 'totalAmount', render: (r) => fmtMoney(r.totalAmount) },
   { title: '数量', key: 'quantity', render: (r) => `${Number(r.quantity) || 0} 盒` },
   { title: '状态', key: 'status', width: '90px', tag: (r) => statusTag(Number(r.status)) },
-  { title: '采购日期', key: 'createTime', className: 'dim' },
-  { title: '经办人', key: 'createBy', className: 'dim' }
+  { title: '采购日期', key: 'createTime', className: 'dim', render: (r) => String(r.createTime || '').slice(0, 10) },
+  { title: '经办人', key: 'createByName', className: 'dim' }
 ]
 
 // 拉取列表（失败时 DataTable 自动回退 mock）
@@ -192,16 +199,25 @@ const formVisible = ref(false)
 // 明细行：每行 { drugId, quantity, price }，金额由数量*单价实时算出
 const form = reactive({ id: null, supplierId: null, warehouseId: null, purchaseDate: todayStr(), remark: '', items: [] })
 
-// 新增为空表单，编辑时回填单据头与明细
-function openForm(row) {
+// 新增为空表单；编辑时先请求详情接口，列表行不含明细，必须回查才能回填 items
+async function openForm(row) {
+  let detail = row
+  if (row) {
+    try {
+      detail = await getPurchaseOrder(row.id) || row
+    } catch (e) {
+      detail = row // 详情接口异常时退回列表行，避免弹窗打不开
+    }
+  }
+  const items = (detail && detail.items) || []
   Object.assign(form, {
-    id: row ? row.id : null,
-    supplierId: row ? row.supplierId ?? null : null,
-    warehouseId: row ? row.warehouseId ?? null : null,
-    purchaseDate: row ? (row.createTime || todayStr()) : todayStr(),
-    remark: row ? row.remark || '' : '',
-    items: row && row.items && row.items.length
-      ? row.items.map(it => ({ drugId: it.drugId, quantity: it.quantity, price: it.purchasePrice ?? it.price ?? 0 }))
+    id: detail ? detail.id : null,
+    supplierId: detail ? detail.supplierId ?? null : null,
+    warehouseId: detail ? detail.warehouseId ?? null : null,
+    purchaseDate: detail ? String(detail.createTime || todayStr()).slice(0, 10) : todayStr(),
+    remark: detail ? detail.remark || '' : '',
+    items: items.length
+      ? items.map(it => ({ drugId: it.drugId, quantity: it.quantity, price: it.purchasePrice ?? it.price ?? 0 }))
       : [{ drugId: null, quantity: 1, price: 0 }]
   })
   formVisible.value = true
@@ -241,6 +257,39 @@ async function save() {
     tableRef.value.reload()
   } catch (e) {
     notifyError(e.message || '保存失败')
+  }
+}
+
+// 提交采购单：草稿 → 待审核，提交后不可再编辑/删除，可进入入库流程
+async function submit(row) {
+  try {
+    await submitPurchaseOrder(row.id)
+    notifySuccess('已提交，等待入库')
+    tableRef.value.reload()
+  } catch (e) {
+    notifyError(e.message || '提交失败')
+  }
+}
+
+// 审核通过：待审核 → 待入库
+async function approve(row) {
+  try {
+    await approvePurchaseOrder(row.id)
+    notifySuccess('审核通过，已转为待入库')
+    tableRef.value.reload()
+  } catch (e) {
+    notifyError(e.message || '审核失败')
+  }
+}
+
+// 驳回：待审核 → 已驳回
+async function reject(row) {
+  try {
+    await rejectPurchaseOrder(row.id)
+    notifySuccess('已驳回')
+    tableRef.value.reload()
+  } catch (e) {
+    notifyError(e.message || '驳回失败')
   }
 }
 

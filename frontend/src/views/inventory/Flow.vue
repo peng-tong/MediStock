@@ -47,15 +47,17 @@ const columns = [
   { title: '药品', key: 'drugName', className: 'name' },
   { title: '仓库', key: 'warehouseName' },
   { title: '批号', key: 'batchNo', className: 'mono dim', width: '130px' },
-  { title: '变动数量', key: 'changeQuantity', align: 'center', width: '90px',
+  // html: true 表示 render 返回带样式的 HTML（由 DataTable 用 v-html 渲染）
+  { title: '变动数量', key: 'changeQuantity', align: 'center', width: '90px', html: true,
     render: (r) => {
       const n = Number(r.changeQuantity)
       const color = n > 0 ? '#16A34A' : n < 0 ? '#DC2626' : 'inherit'
       const prefix = n > 0 ? '+' : ''
       return `<span style="color:${color};font-weight:600">${prefix}${n}</span>`
     } },
-  { title: '操作人', key: 'operator', className: 'dim' },
-  { title: '时间', key: 'createTime', className: 'dim', width: '150px' }
+  { title: '操作人', key: 'operatorName', className: 'dim' },
+  { title: '时间', key: 'createTime', className: 'dim', width: '150px',
+    render: (r) => String(r.createTime || '').slice(0, 16).replace('T', ' ') }
 ]
 
 // 拉取接口：异常时由 DataTable 回退 mock

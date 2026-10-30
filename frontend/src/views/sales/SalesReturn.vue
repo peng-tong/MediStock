@@ -44,9 +44,9 @@
                 </select>
               </td>
               <td>
-                <select v-model="it.batchNo" style="height:32px;border:1.5px solid var(--line);border-radius:8px;padding:0 8px;font-size:12.5px;width:170px">
-                  <option value="" disabled>选择批号</option>
-                  <option v-for="b in batchOptions" :key="b.batchNo" :value="b.batchNo">{{ b.batchNo }}（效期 {{ b.expiryDate }}）</option>
+                <select v-model="it.batchId" style="height:32px;border:1.5px solid var(--line);border-radius:8px;padding:0 8px;font-size:12.5px;width:190px">
+                  <option :value="null" disabled>选择批次</option>
+                  <option v-for="b in batchesFor(it.drugId)" :key="b.id" :value="b.id">{{ b.batchNo }}（效期 {{ b.expiryDate || '-' }}｜余 {{ b.quantity }}）</option>
                 </select>
               </td>
               <td><input type="number" min="0" v-model.number="it.quantity" style="width:70px;height:32px;border:1.5px solid var(--line);border-radius:8px;padding:0 8px;text-align:center"></td>
@@ -82,6 +82,7 @@ import PageCard from '../../components/PageCard.vue'
 import DataTable from '../../components/DataTable.vue'
 import Modal from '../../components/Modal.vue'
 import { getSalesReturns, createSalesReturn, getCustomerOptions } from '../../api/sales'
+import { getStockBatches } from '../../api/inventory'
 import { getWarehouseOptions, getDrugOptions } from '../../api/purchase'
 import { notifySuccess, notifyError } from '../../utils/notify'
 
@@ -108,8 +109,7 @@ const columns = [
   { title: '客户', key: 'customerName' },
   { title: '金额', key: 'totalAmount', render: (r) => fmtMoney(r.totalAmount) },
   { title: '状态', key: 'status', width: '90px', tag: (r) => statusTag(Number(r.status)) },
-  { title: '日期', key: 'createTime', className: 'dim' },
-  { title: '经办人', key: 'createBy', className: 'dim' }
+  { title: '日期', key: 'createTime', className: 'dim', render: (r) => String(r.createTime || '').slice(0, 10) }
 ]
 
 // 拉取列表（失败时 DataTable 自动回退 mock）
@@ -128,12 +128,13 @@ const mockData = [
 const customerOptions = ref([])
 const warehouseOptions = ref([])
 const drugOptions = ref([])
-// 静态批次数组（演示用）
-const batchOptions = [
-  { batchNo: 'A20250812', expiryDate: '2027-08-12' },
-  { batchNo: 'B20250903', expiryDate: '2027-09-03' },
-  { batchNo: 'L20251002', expiryDate: '2026-11-20' }
-]
+// 批次来自后端真实库存（返还需要回补指定批次）
+const batchOptions = ref([])
+// 按药品过滤可选批次
+function batchesFor(drugId) {
+  if (!drugId) return batchOptions.value
+  return batchOptions.value.filter(b => b.drugId === drugId)
+}
 
 async function loadOptions() {
   try {
@@ -163,6 +164,13 @@ async function loadOptions() {
       { id: 5, genericName: '二甲双胍缓释片', spec: '0.5g×60片' }
     ]
   }
+  // 批次库存（无数据时不回退 mock，避免提交到不存在的批次）
+  try {
+    const data = await getStockBatches({ page: 1, pageSize: 200 })
+    batchOptions.value = (data && data.list) || []
+  } catch (e) {
+    batchOptions.value = []
+  }
 }
 loadOptions()
 
@@ -171,12 +179,12 @@ const formVisible = ref(false)
 const form = reactive({ customerId: null, warehouseId: null, remark: '', items: [] })
 
 function openForm() {
-  Object.assign(form, { customerId: null, warehouseId: null, remark: '', items: [{ drugId: null, batchNo: '', quantity: 1, returnPrice: 0 }] })
+  Object.assign(form, { customerId: null, warehouseId: null, remark: '', items: [{ drugId: null, batchId: null, quantity: 1, returnPrice: 0 }] })
   formVisible.value = true
 }
 
 function addRow() {
-  form.items.push({ drugId: null, batchNo: '', quantity: 1, returnPrice: 0 })
+  form.items.push({ drugId: null, batchId: null, quantity: 1, returnPrice: 0 })
 }
 function removeRow(i) {
   if (form.items.length > 1) form.items.splice(i, 1)
@@ -188,14 +196,14 @@ const formTotal = computed(() => form.items.reduce((s, it) => s + (Number(it.qua
 // 保存退货单
 async function save() {
   if (!form.customerId) return notifyError('请选择客户')
-  if (!form.items.length || form.items.some(it => !it.drugId || !it.batchNo)) return notifyError('请至少填写一行 药品 + 批号 明细')
+  if (!form.items.length || form.items.some(it => !it.drugId || !it.batchId)) return notifyError('请至少填写一行 药品 + 批次 明细')
   const payload = {
     customerId: form.customerId,
     warehouseId: form.warehouseId,
     remark: form.remark,
     items: form.items.map(it => ({
       drugId: it.drugId,
-      batchNo: it.batchNo,
+      batchId: it.batchId,
       quantity: Number(it.quantity) || 0,
       returnPrice: Number(it.returnPrice) || 0
     }))

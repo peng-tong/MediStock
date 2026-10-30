@@ -91,9 +91,9 @@
         <div class="card-title">单据信息</div>
         <div class="form-grid">
           <div class="f-item"><label>盘点仓库</label><input :value="current.warehouseName" disabled></div>
-          <div class="f-item"><label>盘点范围</label><input :value="current.range" disabled></div>
+          <div class="f-item"><label>盘点范围</label><input :value="current.range || '全部药品'" disabled></div>
           <div class="f-item"><label>盘点方式</label><input value="现场实物盘点" disabled></div>
-          <div class="f-item"><label>盘点人</label><input :value="current.createBy + (current.createTime ? ' · ' + current.createTime : '')" disabled></div>
+          <div class="f-item"><label>盘点人</label><input :value="(current.createByName || '') + (current.createTime ? ' · ' + String(current.createTime).slice(0, 10) : '')" disabled></div>
         </div>
       </div>
 
@@ -221,11 +221,10 @@ const current = ref({ id: null, takeNo: '', warehouseName: '', range: '', create
 const listColumns = [
   { title: '盘点单号', key: 'takeNo', className: 'mono name', width: '180px' },
   { title: '盘点仓库', key: 'warehouseName' },
-  { title: '盘点范围', key: 'range' },
-  { title: '药品品种', key: 'speciesCount', align: 'center', render: (r) => `${r.speciesCount} 种` },
+  { title: '药品品种', key: 'speciesCount', align: 'center', render: (r) => `${r.speciesCount || 0} 种` },
   { title: '状态', key: 'status', width: '100px', tag: (r) => ({ 0: { type: 'info', text: '盘点中' }, 1: { type: 'ok', text: '已完成' }, 2: { type: 'gray', text: '已取消' } })[Number(r.status)] || { type: 'gray', text: '未知' } },
-  { title: '盘点日期', key: 'createTime', className: 'dim', width: '130px' },
-  { title: '盘点人', key: 'createBy', className: 'dim', width: '100px' }
+  { title: '盘点日期', key: 'createTime', className: 'dim', width: '130px', render: (r) => String(r.createTime || '').slice(0, 10) },
+  { title: '盘点人', key: 'createByName', className: 'dim', width: '100px' }
 ]
 
 // 兜底演示列表（1 条盘点中 + 2 条已完成）
@@ -303,10 +302,14 @@ async function openCount(row) {
   current.value = row
   try {
     const d = await getStocktake(row.id)
-    if (d && Array.isArray(d.items) && d.items.length) {
-      rows.splice(0, rows.length, ...d.items.map(it => ({ price: 0, remark: '—', ...it })))
+    if (d) {
+      // 详情含仓库名/盘点人/明细，合并回当前单据信息
+      current.value = { ...row, ...d }
+      if (Array.isArray(d.items) && d.items.length) {
+        rows.splice(0, rows.length, ...d.items.map(it => ({ price: 0, remark: '—', ...it })))
+      }
     }
-  } catch (e) { /* 接口异常，使用内置 mock 明细 */ }
+  } catch (e) { /* 接口异常，沿用列表行与内置演示明细 */ }
   view.value = 'count'
   step.value = 2
 }
