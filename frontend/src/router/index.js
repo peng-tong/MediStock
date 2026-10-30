@@ -1,6 +1,6 @@
 // 路由表：全部业务页面（静态注册，配合登录守卫）
 import { createRouter, createWebHistory } from 'vue-router'
-import { userStore } from '../stores/user'
+import { userStore, isSuperAdmin } from '../stores/user'
 import { TOKEN_KEY } from '../api/request'
 
 const routes = [
@@ -9,8 +9,8 @@ const routes = [
     path: '/',
     component: () => import('../layouts/MainLayout.vue'),
     children: [
-      { path: '', redirect: '/dashboard' },
-      { path: 'dashboard', component: () => import('../views/Dashboard.vue'), meta: { title: '工作台' } },
+      // 工作台页面为纯静态假数据且无后端统计接口，已屏蔽（详见 docs/屏蔽功能清单.md）
+      { path: '', redirect: '/base/drugs' },
       // 基础资料
       { path: 'base/drugs', component: () => import('../views/base/Drug.vue'), meta: { title: '药品档案' } },
       { path: 'base/categories', component: () => import('../views/base/DrugCategory.vue'), meta: { title: '药品分类' } },
@@ -29,23 +29,17 @@ const routes = [
       { path: 'inventory/stocks', component: () => import('../views/inventory/StockQuery.vue'), meta: { title: '库存查询' } },
       { path: 'inventory/batches', component: () => import('../views/inventory/Batch.vue'), meta: { title: '批次管理' } },
       { path: 'inventory/flows', component: () => import('../views/inventory/Flow.vue'), meta: { title: '库存流水' } },
-      { path: 'inventory/stocktakes', component: () => import('../views/inventory/Stocktake.vue'), meta: { title: '库存盘点' } },
-      { path: 'inventory/transfers', component: () => import('../views/inventory/Transfer.vue'), meta: { title: '库存调拨' } },
-      // 预警 / 报表
+      // 库存盘点：已屏蔽（无菜单入口，路由同时移除；后端接口保留）
+      // 预警
       { path: 'alert', component: () => import('../views/alert/AlertCenter.vue'), meta: { title: '预警中心' } },
-      { path: 'report', component: () => import('../views/report/Report.vue'), meta: { title: '报表中心' } },
-      // 系统管理
+      // 系统管理（角色管理 / 菜单权限已屏蔽：无实际权限功能）
       { path: 'system/users', component: () => import('../views/system/User.vue'), meta: { title: '用户管理' } },
-      { path: 'system/roles', component: () => import('../views/system/Role.vue'), meta: { title: '角色管理' } },
-      { path: 'system/menus', component: () => import('../views/system/MenuManage.vue'), meta: { title: '菜单权限' } },
-      { path: 'system/params', component: () => import('../views/system/Param.vue'), meta: { title: '参数配置' } },
-      { path: 'system/logs', component: () => import('../views/system/Log.vue'), meta: { title: '审计日志' } },
       // 多租户
       { path: 'tenant', component: () => import('../views/tenant/Tenant.vue'), meta: { title: '租户管理' } }
     ]
   },
-  // 未匹配路由回工作台
-  { path: '/:pathMatch(.*)*', redirect: '/dashboard' }
+  // 未匹配路由回药品档案（工作台已屏蔽）
+  { path: '/:pathMatch(.*)*', redirect: '/base/drugs' }
 ]
 
 const router = createRouter({
@@ -57,10 +51,12 @@ const router = createRouter({
 router.beforeEach((to) => {
   const token = localStorage.getItem(TOKEN_KEY)
   if (to.path === '/login') {
-    return token ? '/dashboard' : true
+    return token ? '/base/drugs' : true
   }
   if (!token) return { path: '/login' }
   if (!userStore.user && !userStore.loading) userStore.fetchMe()
+  // 多租户模块属权限限制：非平台超管（tenantId≠0）不可访问
+  if (to.path.startsWith('/tenant') && !isSuperAdmin()) return { path: '/base/drugs' }
   if (to.meta.title) document.title = `${to.meta.title} · MediStock`
   return true
 })

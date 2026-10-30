@@ -72,14 +72,14 @@ async function refreshCaptcha() {
   }
 }
 
-// 登录：成功跳工作台
+// 登录：成功跳转药品档案（工作台页面已屏蔽）
 async function submit() {
   if (!form.username || !form.password) { errorMsg.value = '请输入账号与密码'; return }
   loading.value = true
   errorMsg.value = ''
   try {
     await userStore.login({ ...form })
-    router.push('/dashboard')
+    router.push('/base/drugs')
   } catch (e) {
     errorMsg.value = e.message || '登录失败，请稍后重试'
     refreshCaptcha()

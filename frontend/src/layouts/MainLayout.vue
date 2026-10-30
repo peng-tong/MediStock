@@ -62,16 +62,19 @@
 <script setup>
 import { computed, reactive, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { userStore } from '../stores/user'
+import { userStore, isSuperAdmin } from '../stores/user'
 import { staticMenus } from '../menu'
 
 const router = useRouter()
 const route = useRoute()
 
 // 当前显示的菜单：后端菜单树优先，空/异常时用静态菜单
+// superAdminOnly 的模块属权限限制，非平台超管登录时不渲染（多租户模块）
 const menus = computed(() => {
-  if (userStore.menus && Array.isArray(userStore.menus) && userStore.menus.length) return userStore.menus
-  return staticMenus
+  const raw = (userStore.menus && Array.isArray(userStore.menus) && userStore.menus.length)
+    ? userStore.menus
+    : staticMenus
+  return raw.filter((m) => !m.superAdminOnly || isSuperAdmin())
 })
 
 // 顶层单条目（无 children 且有 path）
@@ -124,10 +127,13 @@ async function logout() {
 <style scoped>
 /* ===== 主布局（对齐风格一原型） ===== */
 .shell{display:grid;grid-template-columns:248px 1fr;height:100vh;overflow:hidden}
-.sidebar{background:#fff;border-right:1px solid var(--line);display:flex;flex-direction:column;padding:20px 14px}
-.brand-logo{display:flex;align-items:center;gap:12px;font-size:17px;font-weight:700;letter-spacing:1px;color:var(--ink);padding:6px 10px 18px;border-bottom:1px dashed var(--line)}
+.sidebar{background:#fff;border-right:1px solid var(--line);display:flex;flex-direction:column;padding:20px 14px;min-height:0}
+.brand-logo{display:flex;align-items:center;gap:12px;font-size:17px;font-weight:700;letter-spacing:1px;color:var(--ink);padding:6px 10px 18px;border-bottom:1px dashed var(--line);flex:none}
 .brand-logo .mark{width:38px;height:38px;border-radius:12px;background:var(--primary-soft);color:var(--primary);display:grid;place-items:center;font-size:20px}
-.nav{flex:1;overflow-y:auto;padding-top:14px}
+/* 菜单区：内容超出时可上下滚动，但隐藏滚动条 */
+.nav{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding-top:14px;
+  scrollbar-width:none;-ms-overflow-style:none;overscroll-behavior:contain}
+.nav::-webkit-scrollbar{width:0;height:0;display:none}
 .nav-group{margin-bottom:6px}
 /* 折叠头：模块行（图标 + 名称 + 展开箭头） */
 .group-head{display:flex;align-items:center;gap:10px;padding:9px 12px;margin:2px 0;border-radius:10px;color:var(--body);cursor:pointer;transition:.18s;font-size:13.5px;font-weight:600;user-select:none}

@@ -2,8 +2,32 @@
 import { reactive } from 'vue'
 import { login as apiLogin, getMe, logout as apiLogout } from '../api/auth'
 
+/**
+ * 解析 JWT payload（仅用于前端展示与菜单过滤，不做签名校验）
+ * 后端 token 内置 userId / tenantId / username；tenantId=0 即平台超管
+ */
+function decodeJwtPayload(token) {
+  try {
+    const part = token.split('.')[1]
+    if (!part) return {}
+    // JWT 使用 base64url，需转成标准 base64 再补齐 padding
+    const b64 = part.replace(/-/g, '+').replace(/_/g, '/')
+    const padded = b64 + '='.repeat((4 - (b64.length % 4)) % 4)
+    // 用 TextDecoder 解码，避免用户名中文乱码
+    const json = new TextDecoder().decode(Uint8Array.from(atob(padded), (c) => c.charCodeAt(0)))
+    return JSON.parse(json)
+  } catch (e) {
+    return {}
+  }
+}
+
+// 初始登录态来自 localStorage，同时解析出所属租户
+const initialToken = localStorage.getItem('ms_token') || ''
+const initialPayload = decodeJwtPayload(initialToken)
+
 export const userStore = reactive({
-  token: localStorage.getItem('ms_token') || '',
+  token: initialToken,
+  tenantId: initialPayload.tenantId ?? null, // 0=平台超管；其它为普通租户
   user: JSON.parse(localStorage.getItem('ms_user') || 'null'),
   roles: [],
   menus: null,   // 后端返回的菜单树（为空时界面回退静态菜单）
@@ -13,6 +37,7 @@ export const userStore = reactive({
   async login(form) {
     const data = await apiLogin(form)
     this.token = data.token
+    this.tenantId = decodeJwtPayload(data.token).tenantId ?? null
     localStorage.setItem('ms_token', data.token)
     await this.fetchMe()
   },
@@ -38,6 +63,7 @@ export const userStore = reactive({
   async logout() {
     try { await apiLogout() } catch (e) { /* 忽略登出接口异常 */ }
     this.token = ''
+    this.tenantId = null
     this.user = null
     this.roles = []
     this.menus = null
@@ -45,3 +71,8 @@ export const userStore = reactive({
     localStorage.removeItem('ms_user')
   }
 })
+
+/** 是否平台超管（tenantId=0）：仅超管可访问多租户模块、可指定用户所属租户 */
+export function isSuperAdmin() {
+  return Number(userStore.tenantId) === 0
+}

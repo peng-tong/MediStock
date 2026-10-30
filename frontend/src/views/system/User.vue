@@ -31,10 +31,24 @@
     <!-- 新增/编辑弹窗 -->
     <Modal :visible="formVisible" :title="form.id ? '编辑用户' : '新增用户'" @close="formVisible = false">
       <div class="form-grid">
-        <div class="f-item"><label>用户名 *</label><input v-model.trim="form.username" placeholder="登录账号"></div>
-        <div class="f-item"><label>姓名 *</label><input v-model.trim="form.realName" placeholder="真实姓名"></div>
-        <div class="f-item"><label>手机号</label><input v-model.trim="form.phone" placeholder="手机号"></div>
-        <div class="f-item"><label>邮箱</label><input v-model.trim="form.email" placeholder="邮箱"></div>
+        <div class="f-item"><label>用户名 *</label><input v-model.trim="form.username" placeholder="登录账号" autocomplete="off"></div>
+        <div class="f-item"><label>姓名 *</label><input v-model.trim="form.realName" placeholder="真实姓名" autocomplete="off"></div>
+        <div class="f-item"><label>手机号</label><input v-model.trim="form.phone" placeholder="手机号" autocomplete="off"></div>
+        <!-- 邮箱不做默认值，新增时留空，避免浏览器自动填充 -->
+        <div class="f-item"><label>邮箱</label><input v-model.trim="form.email" placeholder="邮箱（选填）" autocomplete="off" name="ms-user-email"></div>
+        <!-- 密码仅新增时可设置（后端更新接口不允许改密） -->
+        <div v-if="!form.id" class="f-item">
+          <label>登录密码</label>
+          <input v-model.trim="form.password" type="password" placeholder="留空默认 admin123" autocomplete="new-password">
+        </div>
+        <!-- 所属租户：仅超管（tenantId=0）新增时可选；非超管强制归属当前租户，不展示该字段 -->
+        <div v-if="!form.id && isSuperAdmin() && tenantOptions.length" class="f-item">
+          <label>所属租户</label>
+          <select v-model="form.tenantId">
+            <option :value="null">平台（不绑定租户）</option>
+            <option v-for="t in tenantOptions" :key="t.id" :value="t.id">{{ t.name }}</option>
+          </select>
+        </div>
         <div class="f-item"><label>状态</label>
           <select v-model="form.status"><option :value="1">启用</option><option :value="0">禁用</option></select>
         </div>
@@ -53,8 +67,9 @@ import { reactive, ref } from 'vue'
 import PageCard from '../../components/PageCard.vue'
 import DataTable from '../../components/DataTable.vue'
 import Modal from '../../components/Modal.vue'
-import { getUsers, createUser, updateUser, deleteUser, updateUserStatus, resetUserPassword } from '../../api/system'
+import { getUsers, createUser, updateUser, deleteUser, updateUserStatus, resetUserPassword, getTenants } from '../../api/system'
 import { notifySuccess, notifyError } from '../../utils/notify'
+import { isSuperAdmin } from '../../stores/user'
 
 const tableRef = ref()
 // 查询条件（传给 DataTable，变化自动刷新）
@@ -95,11 +110,26 @@ const mockData = [
 
 // ---------- 弹窗表单 ----------
 const formVisible = ref(false)
-const form = reactive({ id: null, username: '', realName: '', phone: '', email: '', status: 1 })
+const form = reactive({ id: null, username: '', realName: '', phone: '', email: '', status: 1, password: '', tenantId: null })
 
-// 打开表单：新增为空表单，编辑回填
+// 租户下拉：仅平台超管加载；普通租户账号不请求该接口（所属租户由后端强制为当前租户）
+const tenantOptions = ref([])
+async function loadTenants() {
+  if (!isSuperAdmin()) { tenantOptions.value = []; return }
+  try {
+    const data = await getTenants({ page: 1, pageSize: 100 })
+    tenantOptions.value = (data && data.list) || []
+  } catch (e) {
+    tenantOptions.value = []
+  }
+}
+loadTenants()
+
+// 打开表单：新增为空表单，编辑回填（密码/租户不参与编辑）
 function openForm(row) {
-  Object.assign(form, row ? { ...row } : { id: null, username: '', realName: '', phone: '', email: '', status: 1 })
+  Object.assign(form, row
+    ? { ...row, password: '', tenantId: row.tenantId ?? null }
+    : { id: null, username: '', realName: '', phone: '', email: '', status: 1, password: '', tenantId: null })
   formVisible.value = true
 }
 
