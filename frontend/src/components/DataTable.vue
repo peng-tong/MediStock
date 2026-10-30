@@ -12,8 +12,12 @@
         <tbody>
           <tr v-for="(r, i) in rows" :key="i">
             <td v-for="c in columns" :key="c.key || c.title" :class="c.className" :style="{ textAlign: c.align }">
-              <!-- 三种列渲染：自定义 render / 状态标签 tag / 默认取字段 -->
-              <template v-if="c.render">{{ c.render(r) }}</template>
+              <!-- 三种列渲染：自定义 render（支持 html 标记）/ 状态标签 tag / 默认取字段 -->
+              <template v-if="c.render">
+                <!-- html 列用于带颜色的数字/天数；内容均由页面自身生成，不含用户输入 -->
+                <span v-if="c.html" v-html="c.render(r)"></span>
+                <template v-else>{{ c.render(r) }}</template>
+              </template>
               <template v-else-if="c.tag">
                 <span class="tag" :class="c.tag(r).type">{{ c.tag(r).text }}</span>
               </template>
@@ -29,14 +33,19 @@
         </tbody>
       </table>
     </div>
-    <!-- 分页 -->
+    <!-- 分页：改用 Element Plus 分页组件，风格与全站统一 -->
     <div class="pager">
-      <span>共 {{ total }} 条 · 第 {{ page }} / {{ totalPages }} 页</span>
-      <div class="flex" style="gap:6px">
-        <button class="pbtn" :disabled="page <= 1" @click="go(page - 1)">‹</button>
-        <button v-for="p in pageList" :key="p" class="pbtn" :class="{ cur: p === page }" @click="go(p)">{{ p }}</button>
-        <button class="pbtn" :disabled="page >= totalPages" @click="go(page + 1)">›</button>
-      </div>
+      <span>共 {{ total }} 条</span>
+      <el-pagination
+        background
+        layout="prev, pager, next"
+        :total="total"
+        :page-size="pageSize"
+        :current-page="page"
+        :pager-count="7"
+        hide-on-single-page
+        @current-change="go"
+      />
     </div>
   </div>
 </template>
@@ -61,18 +70,6 @@ const page = ref(1)
 const pageSize = 10
 const loading = ref(false)
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize)))
-
-// 分页按钮列表（最多展示 7 个）
-const pageList = computed(() => {
-  const t = totalPages.value
-  const p = page.value
-  let s = Math.max(1, p - 3)
-  let e = Math.min(t, s + 6)
-  s = Math.max(1, e - 6)
-  const arr = []
-  for (let i = s; i <= e; i++) arr.push(i)
-  return arr
-})
 
 // 加载数据：优先调接口，失败回退 mock（mock 做本地分页）
 async function load() {
