@@ -29,7 +29,7 @@ public class AuthService {
     private final JwtUtil jwtUtil;
 
     public Map<String, Object> login(LoginReq req) {
-        // 1. 校验图形验证码
+        // 1. 校验图形验证码（一次性，校验后即失效）
         if (!captchaStore.verify(req.getCaptchaKey(), req.getCaptchaCode())) {
             throw new BusinessException(ErrorCode.CAPTCHA_INVALID);
         }

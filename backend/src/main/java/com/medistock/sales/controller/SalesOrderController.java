@@ -24,6 +24,12 @@ public class SalesOrderController {
         return Result.ok(service.createOrder(req.getOrder(), req.getItems()));
     }
 
+    @PutMapping("/{id}")
+    public Result<Void> update(@PathVariable Long id, @Valid @RequestBody SalesOrderCreateReq req) {
+        service.updateOrder(id, req.getOrder(), req.getItems());
+        return Result.ok();
+    }
+
     @GetMapping
     public Result<PageResult<SalesOrder>> page(@RequestParam(defaultValue = "1") int page,
                                                @RequestParam(defaultValue = "10") int pageSize,
@@ -41,6 +47,12 @@ public class SalesOrderController {
     @DeleteMapping("/{id}")
     public Result<Void> delete(@PathVariable Long id) {
         service.deleteOrder(id);
+        return Result.ok();
+    }
+
+    @PostMapping("/{id}/submit")
+    public Result<Void> submit(@PathVariable Long id) {
+        service.submitOrder(id);
         return Result.ok();
     }
 

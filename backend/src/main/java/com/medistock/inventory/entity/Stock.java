@@ -1,5 +1,6 @@
 package com.medistock.inventory.entity;
 
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.baomidou.mybatisplus.annotation.Version;
 import com.medistock.common.entity.BaseEntity;
@@ -24,4 +25,12 @@ public class Stock extends BaseEntity {
     /** 乐观锁版本号（CAS 核心） */
     @Version
     private Integer version;
+    /** 展示字段：药品名称 + 规格（非表字段，列表查询时批量回填） */
+    @TableField(exist = false)
+    private String drugName;
+    @TableField(exist = false)
+    private String spec;
+    /** 展示字段：仓库名称 */
+    @TableField(exist = false)
+    private String warehouseName;
 }

@@ -36,8 +36,9 @@ public class PurchaseInboundService {
         if (order == null) {
             throw new BusinessException(ErrorCode.NOT_FOUND);
         }
-        if (order.getStatus() != 0) {   // 草稿可直接入库；P1 审核流改为 2-已审核后入库
-            throw new BusinessException(ErrorCode.ORDER_STATUS_INVALID);
+        // 仅「审核通过 待入库(2)」可入库，草稿/待审核/已驳回均不可入库
+        if (order.getStatus() == null || order.getStatus() != 2) {
+            throw new BusinessException(ErrorCode.ORDER_STATUS_INVALID, "仅审核通过的采购单可入库");
         }
         for (InboundReq.Item in : items) {
             // 逐项校验：数量必须为正数、批号必填（防脏数据入库）

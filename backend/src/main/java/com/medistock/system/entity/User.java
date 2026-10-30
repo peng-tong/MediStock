@@ -25,4 +25,9 @@ public class User extends BaseEntity {
     /** 0-禁用 1-正常 */
     private Integer status;
     private LocalDateTime lastLoginTime;
+    /** 展示字段：角色名称列表 / 所属租户名称（非表字段） */
+    @TableField(exist = false)
+    private java.util.List<String> roles;
+    @TableField(exist = false)
+    private String tenantName;
 }

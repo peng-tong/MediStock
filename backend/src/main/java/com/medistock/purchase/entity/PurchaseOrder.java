@@ -30,4 +30,13 @@ public class PurchaseOrder extends BaseEntity {
     /** 明细（非表字段，详情返回） */
     @TableField(exist = false)
     private List<PurchaseOrderItem> items;
+    /** 展示字段：供应商名称 / 药品明细摘要 / 明细总数量 / 经办人姓名（列表批量回填） */
+    @TableField(exist = false)
+    private String supplierName;
+    @TableField(exist = false)
+    private String drugNames;
+    @TableField(exist = false)
+    private BigDecimal quantity;
+    @TableField(exist = false)
+    private String createByName;
 }

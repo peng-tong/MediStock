@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.*;
 public class SalesReturnController {
 
     private final SalesReturnService service;
+    private final com.medistock.common.service.NameResolver nameResolver;
 
     @PostMapping
     public Result<Long> create(@Valid @RequestBody SalesReturnCreateReq req) {
@@ -33,6 +34,10 @@ public class SalesReturnController {
         if (status != null) qw.eq(SalesReturn::getStatus, status);
         qw.orderByDesc(SalesReturn::getId);
         Page<SalesReturn> p = service.page(new Page<>(page, pageSize), qw);
+        // 列表回填客户名称（一次批量查询）
+        java.util.Map<Long, String> customers = nameResolver.customerNames(
+                p.getRecords().stream().map(SalesReturn::getCustomerId).toList());
+        p.getRecords().forEach(r -> r.setCustomerName(customers.get(r.getCustomerId())));
         return Result.ok(new PageResult<>(p.getTotal(), p.getRecords()));
     }
 

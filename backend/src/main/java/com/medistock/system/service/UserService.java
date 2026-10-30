@@ -24,14 +24,17 @@ public class UserService extends ServiceImpl<UserMapper, User> {
 
     private final UserRoleMapper userRoleMapper;
     private final RoleMapper roleMapper;
+    private final com.medistock.system.mapper.TenantMapper tenantMapper;
     private final PasswordEncoder passwordEncoder;
 
     public UserService(UserMapper userMapper, UserRoleMapper userRoleMapper,
-                       RoleMapper roleMapper, PasswordEncoder passwordEncoder) {
+                       RoleMapper roleMapper, com.medistock.system.mapper.TenantMapper tenantMapper,
+                       PasswordEncoder passwordEncoder) {
         // ServiceImpl 在 MP 3.5.7 无带参构造器，直接为 protected baseMapper 赋值
         this.baseMapper = userMapper;
         this.userRoleMapper = userRoleMapper;
         this.roleMapper = roleMapper;
+        this.tenantMapper = tenantMapper;
         this.passwordEncoder = passwordEncoder;
     }
 
@@ -64,7 +67,38 @@ public class UserService extends ServiceImpl<UserMapper, User> {
             qw.eq(User::getStatus, status);
         }
         qw.orderByDesc(User::getId);
-        return this.page(new Page<>(page, pageSize), qw);
+        Page<User> p = this.page(new Page<>(page, pageSize), qw);
+        enrich(p.getRecords());
+        return p;
+    }
+
+    /** 列表展示回填：角色名称列表 / 所属租户名称（批量查询避免 N+1） */
+    private void enrich(List<User> users) {
+        if (users == null || users.isEmpty()) return;
+        List<Long> userIds = users.stream().map(User::getId).toList();
+        // 用户 → 角色 id
+        java.util.Map<Long, List<Long>> roleIdsByUser = new java.util.HashMap<>();
+        userRoleMapper.selectList(new LambdaQueryWrapper<UserRole>().in(UserRole::getUserId, userIds))
+                .forEach(ur -> roleIdsByUser.computeIfAbsent(ur.getUserId(), k -> new java.util.ArrayList<>())
+                        .add(ur.getRoleId()));
+        // 角色 id → 角色名
+        List<Long> roleIds = roleIdsByUser.values().stream().flatMap(List::stream).distinct().toList();
+        java.util.Map<Long, String> roleNames = roleIds.isEmpty() ? java.util.Map.of()
+                : roleMapper.selectBatchIds(roleIds).stream()
+                        .collect(java.util.stream.Collectors.toMap(Role::getId, Role::getName, (a, b) -> a));
+        // 租户 id → 租户名（超管 tenant_id=0 无对应租户，名称为空）
+        List<Long> tenantIds = users.stream().map(User::getTenantId)
+                .filter(java.util.Objects::nonNull).distinct().toList();
+        java.util.Map<Long, String> tenantNames = tenantIds.isEmpty() ? java.util.Map.of()
+                : tenantMapper.selectBatchIds(tenantIds).stream()
+                        .collect(java.util.stream.Collectors.toMap(
+                                com.medistock.system.entity.Tenant::getId,
+                                com.medistock.system.entity.Tenant::getName, (a, b) -> a));
+        users.forEach(u -> {
+            u.setRoles(roleIdsByUser.getOrDefault(u.getId(), List.of()).stream()
+                    .map(roleNames::get).filter(java.util.Objects::nonNull).toList());
+            u.setTenantName(tenantNames.get(u.getTenantId()));
+        });
     }
 
     public void changeStatus(Long id, Integer status) {

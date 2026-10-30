@@ -1,6 +1,7 @@
 package com.medistock.sales.service;
 
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.medistock.common.config.TenantContext;
 import com.medistock.common.exception.BusinessException;
 import com.medistock.common.exception.ErrorCode;
 import com.medistock.inventory.service.StockService;
@@ -43,10 +44,13 @@ public class SalesReturnService extends ServiceImpl<SalesReturnMapper, SalesRetu
                 + String.format("%03d", this.count(null) + 1));
         ret.setTotalAmount(total);
         ret.setStatus(1);   // 创建即完成（简化 P0）
+        // 超管（tenantId=0）时租户拦截器不注入 tenant_id，必须显式补默认值（防 NOT NULL 违反）
+        ret.setTenantId(TenantContext.getTenantId() == null ? 0L : TenantContext.getTenantId());
         this.save(ret);
         for (SalesReturnItem item : items) {
             item.setReturnId(ret.getId());
             item.setAmount(item.getReturnPrice().multiply(item.getQuantity()));
+            item.setTenantId(ret.getTenantId());
             itemMapper.insert(item);
             // 回补指定批次（过期批次可退，逻辑由上层单据控制）
             stockService.restockBatch(item.getDrugId(), ret.getWarehouseId(), item.getBatchId(),

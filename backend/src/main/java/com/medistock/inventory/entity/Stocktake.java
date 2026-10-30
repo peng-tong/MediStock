@@ -1,5 +1,6 @@
 package com.medistock.inventory.entity;
 
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.medistock.common.entity.BaseEntity;
 import lombok.Data;
@@ -19,4 +20,14 @@ public class Stocktake extends BaseEntity {
     private Long createBy;
     private Long auditBy;   // 复核人（P1 预留）
     private String remark;
+    /** 展示字段：仓库名称 / 药品品种数 / 盘点人姓名（非表字段） */
+    @TableField(exist = false)
+    private String warehouseName;
+    @TableField(exist = false)
+    private Integer speciesCount;
+    @TableField(exist = false)
+    private String createByName;
+    /** 详情返回的明细列表（非表字段） */
+    @TableField(exist = false)
+    private java.util.List<StocktakeItem> items;
 }

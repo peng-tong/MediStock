@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.*;
 public class PurchaseReturnController {
 
     private final PurchaseReturnService service;
+    private final com.medistock.common.service.NameResolver nameResolver;
 
     @PostMapping
     public Result<Long> create(@Valid @RequestBody PurchaseReturnCreateReq req) {
@@ -33,6 +34,10 @@ public class PurchaseReturnController {
         if (status != null) qw.eq(PurchaseReturn::getStatus, status);
         qw.orderByDesc(PurchaseReturn::getId);
         Page<PurchaseReturn> p = service.page(new Page<>(page, pageSize), qw);
+        // 列表回填供应商名称（一次批量查询）
+        java.util.Map<Long, String> suppliers = nameResolver.supplierNames(
+                p.getRecords().stream().map(PurchaseReturn::getSupplierId).toList());
+        p.getRecords().forEach(r -> r.setSupplierName(suppliers.get(r.getSupplierId())));
         return Result.ok(new PageResult<>(p.getTotal(), p.getRecords()));
     }
 

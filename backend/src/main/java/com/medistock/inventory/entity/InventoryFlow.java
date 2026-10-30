@@ -1,5 +1,6 @@
 package com.medistock.inventory.entity;
 
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.medistock.common.entity.BaseEntity;
 import lombok.Data;
@@ -29,4 +30,13 @@ public class InventoryFlow extends BaseEntity {
     private BigDecimal afterQuantity;
     private Long operator;
     private String remark;
+    /** 展示字段：药品名称 / 仓库名称 / 批号 / 操作人姓名（非表字段） */
+    @TableField(exist = false)
+    private String drugName;
+    @TableField(exist = false)
+    private String warehouseName;
+    @TableField(exist = false)
+    private String batchNo;
+    @TableField(exist = false)
+    private String operatorName;
 }

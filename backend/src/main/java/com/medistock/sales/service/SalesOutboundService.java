@@ -35,7 +35,9 @@ public class SalesOutboundService {
         if (order == null) {
             throw new BusinessException(ErrorCode.NOT_FOUND);
         }
-        if (order.getStatus() != 0) {   // 草稿可直接出库；P1 审核流改为 2-已审核后出库
+        // 销售状态机：0 草稿 → 1 待出库 → 3 已出库（4 已取消）
+        // 必须先「提交」为待出库(1)才能出库，避免草稿未确认直接扣库存
+        if (order.getStatus() == null || order.getStatus() != 1) {
             throw new BusinessException(ErrorCode.ORDER_STATUS_INVALID);
         }
         List<SalesOrderItem> items = itemMapper.selectList(new LambdaQueryWrapper<SalesOrderItem>()

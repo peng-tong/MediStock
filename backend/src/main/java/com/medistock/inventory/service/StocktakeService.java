@@ -3,6 +3,7 @@ package com.medistock.inventory.service;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.medistock.common.config.TenantContext;
 import com.medistock.common.config.UserContext;
 import com.medistock.common.constant.BizConstant;
 import com.medistock.common.exception.BusinessException;
@@ -28,14 +29,81 @@ public class StocktakeService extends ServiceImpl<StocktakeMapper, Stocktake> {
     private final StocktakeItemMapper itemMapper;
     private final StockBatchMapper batchMapper;
     private final StockService stockService;
+    private final com.medistock.common.service.NameResolver nameResolver;
 
     public StocktakeService(StocktakeMapper stocktakeMapper, StocktakeItemMapper itemMapper,
-                            StockBatchMapper batchMapper, StockService stockService) {
+                            StockBatchMapper batchMapper, StockService stockService,
+                            com.medistock.common.service.NameResolver nameResolver) {
         // ServiceImpl 在 MP 3.5.7 无带参构造器，直接为 protected baseMapper 赋值（同 Phase 1 UserService 修正方式）
         this.baseMapper = stocktakeMapper;
         this.itemMapper = itemMapper;
         this.batchMapper = batchMapper;
         this.stockService = stockService;
+        this.nameResolver = nameResolver;
+    }
+
+    /** 盘点单分页：回填仓库名称 / 药品品种数 / 盘点人姓名 */
+    public Page<Stocktake> pageQuery(int page, int pageSize) {
+        Page<Stocktake> p = this.page(new Page<>(page, pageSize),
+                new LambdaQueryWrapper<Stocktake>().orderByDesc(Stocktake::getId));
+        java.util.List<Stocktake> list = p.getRecords();
+        if (list.isEmpty()) return p;
+        java.util.List<Long> takeIds = list.stream().map(Stocktake::getId).toList();
+        java.util.List<StocktakeItem> items = itemMapper.selectList(
+                new LambdaQueryWrapper<StocktakeItem>().in(StocktakeItem::getTakeId, takeIds));
+        // 单号 → 品种数（不同药品数）
+        java.util.Map<Long, Integer> species = new java.util.HashMap<>();
+        java.util.Set<String> seen = new java.util.HashSet<>();  // 记录 takeId:drugId 去重，按品种计数
+        for (StocktakeItem it : items) {
+            if (seen.add(it.getTakeId() + ":" + it.getDrugId())) {
+                species.merge(it.getTakeId(), 1, Integer::sum);
+            }
+        }
+        java.util.Map<Long, String> warehouses = nameResolver.warehouseNames(
+                list.stream().map(Stocktake::getWarehouseId).toList());
+        java.util.Map<Long, String> users = nameResolver.userNames(
+                list.stream().map(Stocktake::getCreateBy).toList());
+        list.forEach(st -> {
+            st.setWarehouseName(warehouses.get(st.getWarehouseId()));
+            st.setCreateByName(users.get(st.getCreateBy()));
+            st.setSpeciesCount(species.getOrDefault(st.getId(), 0));
+        });
+        return p;
+    }
+
+    /** 盘点单详情：带回明细并补齐药品名/规格/批号/有效期，供实盘录入页展示 */
+    public Stocktake detail(Long id) {
+        Stocktake st = this.getById(id);
+        if (st == null) throw new BusinessException(ErrorCode.NOT_FOUND);
+        st.setWarehouseName(nameResolver.warehouseNames(List.of(st.getWarehouseId())).get(st.getWarehouseId()));
+        List<StocktakeItem> items = itemMapper.selectList(
+                new LambdaQueryWrapper<StocktakeItem>().eq(StocktakeItem::getTakeId, id));
+        if (!items.isEmpty()) {
+            // 批量补药品名与规格
+            java.util.Map<Long, com.medistock.base.entity.Drug> drugs = nameResolver.drugs(
+                    items.stream().map(StocktakeItem::getDrugId).toList());
+            // 批量补批号与有效期
+            java.util.List<Long> batchIds = items.stream().map(StocktakeItem::getBatchId)
+                    .filter(java.util.Objects::nonNull).distinct().toList();
+            java.util.Map<Long, StockBatch> batches = batchIds.isEmpty() ? java.util.Map.of()
+                    : batchMapper.selectBatchIds(batchIds).stream()
+                            .collect(java.util.stream.Collectors.toMap(StockBatch::getId, b -> b, (a, b) -> a));
+            items.forEach(it -> {
+                com.medistock.base.entity.Drug d = drugs.get(it.getDrugId());
+                if (d != null) {
+                    it.setDrugName(d.getGenericName());
+                    it.setSpec(d.getSpec());
+                }
+                StockBatch b = batches.get(it.getBatchId());
+                if (b != null) {
+                    it.setBatchNo(b.getBatchNo());
+                    it.setExpiryDate(b.getExpiryDate());
+                }
+                it.setPrice(BigDecimal.ZERO); // 无成本价字段，金额按 0 展示
+            });
+        }
+        st.setItems(items);
+        return st;
     }
 
     /** 创建盘点单：快照该仓库所有批次为账面数 */
@@ -48,6 +116,8 @@ public class StocktakeService extends ServiceImpl<StocktakeMapper, Stocktake> {
         st.setStatus(0);
         st.setCreateBy(UserContext.getUserId());
         st.setRemark(remark);
+        // 超管（tenantId=0）时租户拦截器不注入 tenant_id，必须显式补默认值（防 NOT NULL 违反）
+        st.setTenantId(TenantContext.getTenantId() == null ? 0L : TenantContext.getTenantId());
         this.save(st);
 
         List<StockBatch> batches = batchMapper.selectList(new LambdaQueryWrapper<StockBatch>()
@@ -60,6 +130,8 @@ public class StocktakeService extends ServiceImpl<StocktakeMapper, Stocktake> {
             item.setBookQuantity(b.getQuantity());
             // actualQuantity 保持 null：未录入实盘（确认前由 confirm 校验拦截，防漏录直接确认）
             item.setDiffQuantity(BigDecimal.ZERO);
+            // 超管场景租户拦截器不注入 tenant_id，明细同样需显式补默认值
+            item.setTenantId(st.getTenantId());
             itemMapper.insert(item);
         }
         return st.getId();

@@ -25,11 +25,18 @@ public class PurchaseOrderController {
         return Result.ok(service.createOrder(req.getOrder(), req.getItems()));
     }
 
+    @PutMapping("/{id}")
+    public Result<Void> update(@PathVariable Long id, @Valid @RequestBody PurchaseOrderCreateReq req) {
+        service.updateOrder(id, req.getOrder(), req.getItems());
+        return Result.ok();
+    }
+
     @GetMapping
     public Result<PageResult<PurchaseOrder>> page(@RequestParam(defaultValue = "1") int page,
                                                   @RequestParam(defaultValue = "10") int pageSize,
                                                   @RequestParam(required = false) String orderNo,
-                                                  @RequestParam(required = false) Integer status) {
+                                                  // 逗号分隔多状态：如 "1,2" 表示待审核+待入库（采购入库页按多状态过滤）
+                                                  @RequestParam(required = false) String status) {
         Page<PurchaseOrder> p = service.pageQuery(page, pageSize, orderNo, status);
         return Result.ok(new PageResult<>(p.getTotal(), p.getRecords()));
     }
@@ -42,6 +49,24 @@ public class PurchaseOrderController {
     @DeleteMapping("/{id}")
     public Result<Void> delete(@PathVariable Long id) {
         service.deleteOrder(id);
+        return Result.ok();
+    }
+
+    @PostMapping("/{id}/submit")
+    public Result<Void> submit(@PathVariable Long id) {
+        service.submitOrder(id);
+        return Result.ok();
+    }
+
+    @PostMapping("/{id}/approve")
+    public Result<Void> approve(@PathVariable Long id) {
+        service.approveOrder(id);
+        return Result.ok();
+    }
+
+    @PostMapping("/{id}/reject")
+    public Result<Void> reject(@PathVariable Long id) {
+        service.rejectOrder(id);
         return Result.ok();
     }
 

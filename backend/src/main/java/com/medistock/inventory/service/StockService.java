@@ -219,6 +219,8 @@ public class StockService {
             stock.setWarehouseId(warehouseId);
             stock.setQuantity(changeQty);
             stock.setAvailableQuantity(changeQty);
+            // 超管（tenantId=0）时租户拦截器不注入 tenant_id，必须显式补默认值（防 NOT NULL 违反）
+            stock.setTenantId(TenantContext.getTenantId() == null ? 0L : TenantContext.getTenantId());
             stockMapper.insert(stock);   // 并发插入时唯一索引兜底
         } else {
             stock.setQuantity(stock.getQuantity().add(changeQty));
@@ -246,6 +248,7 @@ public class StockService {
         b.setQuantity(qty);
         b.setInDate(LocalDate.now());
         b.setStatus(0);
+        b.setTenantId(TenantContext.getTenantId() == null ? 0L : TenantContext.getTenantId());
         batchMapper.insert(b);
         return b;
     }
@@ -265,6 +268,7 @@ public class StockService {
         flow.setAfterQuantity(batch.getQuantity());
         flow.setOperator(UserContext.getUserId());
         flow.setRemark(remark);
+        flow.setTenantId(TenantContext.getTenantId() == null ? 0L : TenantContext.getTenantId());
         flowMapper.insert(flow);
     }
 }

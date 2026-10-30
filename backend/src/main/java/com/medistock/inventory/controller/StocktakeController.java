@@ -27,12 +27,12 @@ public class StocktakeController {
     @GetMapping
     public Result<PageResult<Stocktake>> page(@RequestParam(defaultValue = "1") int page,
                                               @RequestParam(defaultValue = "10") int pageSize) {
-        Page<Stocktake> p = service.page(new Page<>(page, pageSize), null);
+        Page<Stocktake> p = service.pageQuery(page, pageSize);
         return Result.ok(new PageResult<>(p.getTotal(), p.getRecords()));
     }
 
     @GetMapping("/{id}")
-    public Result<Stocktake> detail(@PathVariable Long id) { return Result.ok(service.getById(id)); }
+    public Result<Stocktake> detail(@PathVariable Long id) { return Result.ok(service.detail(id)); }
 
     @PutMapping("/{id}/items/{itemId}")
     public Result<Void> updateActual(@PathVariable Long id, @PathVariable Long itemId,

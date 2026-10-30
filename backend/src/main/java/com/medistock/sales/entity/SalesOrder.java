@@ -31,4 +31,14 @@ public class SalesOrder extends BaseEntity {
     /** 明细（非表字段，详情返回） */
     @TableField(exist = false)
     private List<SalesOrderItem> items;
+    /** 展示字段：客户名称 / 开单人姓名（列表批量回填） */
+    @TableField(exist = false)
+    private String customerName;
+    @TableField(exist = false)
+    private String createByName;
+    /** 展示字段：药品明细摘要（"药品 ×数量、…"）与明细总数量 */
+    @TableField(exist = false)
+    private String drugNames;
+    @TableField(exist = false)
+    private BigDecimal quantity;
 }

@@ -28,8 +28,9 @@ public class InventoryController {
     public Result<PageResult<Stock>> stocks(@RequestParam(defaultValue = "1") int page,
                                             @RequestParam(defaultValue = "10") int pageSize,
                                             @RequestParam(required = false) Long drugId,
-                                            @RequestParam(required = false) Long warehouseId) {
-        Page<Stock> p = queryService.pageStock(page, pageSize, drugId, warehouseId);
+                                            @RequestParam(required = false) Long warehouseId,
+                                            @RequestParam(required = false) String keyword) {
+        Page<Stock> p = queryService.pageStock(page, pageSize, drugId, warehouseId, keyword);
         return Result.ok(new PageResult<>(p.getTotal(), p.getRecords()));
     }
 
@@ -37,8 +38,11 @@ public class InventoryController {
     public Result<PageResult<StockBatch>> batches(@RequestParam(defaultValue = "1") int page,
                                                   @RequestParam(defaultValue = "10") int pageSize,
                                                   @RequestParam(required = false) Long drugId,
-                                                  @RequestParam(required = false) Long warehouseId) {
-        Page<StockBatch> p = queryService.pageBatch(page, pageSize, drugId, warehouseId);
+                                                  @RequestParam(required = false) Long warehouseId,
+                                                  @RequestParam(required = false) String keyword,
+                                                  // 效期筛选：90 / 30 / expired / low
+                                                  @RequestParam(required = false) String level) {
+        Page<StockBatch> p = queryService.pageBatch(page, pageSize, drugId, warehouseId, keyword, level);
         return Result.ok(new PageResult<>(p.getTotal(), p.getRecords()));
     }
 

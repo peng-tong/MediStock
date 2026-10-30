@@ -1,5 +1,6 @@
 package com.medistock.sales.entity;
 
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.medistock.common.entity.BaseEntity;
 import lombok.Data;
@@ -22,4 +23,9 @@ public class SalesReturn extends BaseEntity {
     /** 0草稿 1已完成 2已取消 */
     private Integer status;
     private String remark;
+    /** 展示字段：客户名称 / 经办人姓名（非表字段） */
+    @TableField(exist = false)
+    private String customerName;
+    @TableField(exist = false)
+    private String createByName;
 }
