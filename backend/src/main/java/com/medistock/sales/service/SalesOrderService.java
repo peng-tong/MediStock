@@ -69,9 +69,9 @@ public class SalesOrderService extends ServiceImpl<SalesOrderMapper, SalesOrder>
         }
         // 整单金额上限兜底：防多行超大明细累加后超出 DECIMAL(18,4) 容量（SQLite 不报错但数据已失真）
         checkTotalAmount(total);
-        // 折扣口径统一：订单头 discountAmount 由明细折扣汇总得出（不再接受两套口径并存），
-        // 保证同一笔单在列表「金额/优惠」两列展示前后一致
-        order.setDiscountAmount(lineDiscountSum(items));
+        // 折扣口径统一（B-03）：订单头折扣 = Σ明细折扣；请求显式传入的订单级折扣必须与汇总一致，
+        // 不一致直接拒绝（不再静默丢弃），杜绝同单两价
+        reconcileDiscount(order, items);
         // 单号序号取当前租户最大主键 +1（含已删除），避免删草稿后 count 回退导致与既有单号重复
         order.setOrderNo(nextOrderNo());
         order.setTotalAmount(total);
@@ -119,7 +119,8 @@ public class SalesOrderService extends ServiceImpl<SalesOrderMapper, SalesOrder>
         }
         // 编辑与新增共用整单金额上限校验，防超大金额落库
         checkTotalAmount(total);
-        order.setDiscountAmount(lineDiscountSum(items));
+        // 折扣口径统一（B-03）：同创建，订单级折扣与明细汇总不一致即拒绝
+        reconcileDiscount(order, items);
         // 头：只允许改业务字段，单号/租户/创建人等保持不变
         old.setCustomerId(order.getCustomerId());
         old.setWarehouseId(order.getWarehouseId());
@@ -249,6 +250,22 @@ public class SalesOrderService extends ServiceImpl<SalesOrderMapper, SalesOrder>
         return items.stream()
                 .map(i -> i.getDiscountAmount() == null ? BigDecimal.ZERO : i.getDiscountAmount())
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    /**
+     * 折扣口径统一（B-03）：订单头折扣 = Σ明细折扣。
+     * 前端订单头折扣本就是明细汇总值，正常流程恒相等；
+     * 若请求显式传入的订单级折扣与汇总不一致（差额 &gt; 0.01，容忍分位舍入误差），
+     * 拒绝创建/更新，避免「订单级折扣被静默丢弃 → 同一笔单两处金额不一致」。
+     */
+    private void reconcileDiscount(SalesOrder order, List<SalesOrderItem> items) {
+        BigDecimal discountSum = lineDiscountSum(items);
+        if (order.getDiscountAmount() != null
+                && order.getDiscountAmount().subtract(discountSum).abs()
+                .compareTo(new BigDecimal("0.01")) > 0) {
+            throw new BusinessException(ErrorCode.VALIDATE_ERROR, "订单折扣与明细折扣合计不一致");
+        }
+        order.setDiscountAmount(discountSum);
     }
 
     /** 删除：仅草稿（级联删明细 + 删头原子） */
