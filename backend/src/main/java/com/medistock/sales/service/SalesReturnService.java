@@ -68,14 +68,18 @@ public class SalesReturnService extends ServiceImpl<SalesReturnMapper, SalesRetu
         if (ret.getRemark() != null && ret.getRemark().length() > 255) {
             throw new BusinessException(ErrorCode.VALIDATE_ERROR, "备注不能超过255字");
         }
-        // 问题 77：退货仓库/客户（若指定）必须存在且属于当前租户
+        // 问题 77：退货仓库/客户必须存在且属于当前租户
+        // customer_id 为 NOT NULL 列：缺失会导致 SQLite 约束 500，必须在 Service 层强制必填（与仓库一致）
         if (ret.getWarehouseId() == null) {
             throw new BusinessException(ErrorCode.VALIDATE_ERROR, "退货仓库不能为空");
         }
         if (warehouseMapper.selectById(ret.getWarehouseId()) == null) {
             throw new BusinessException(ErrorCode.VALIDATE_ERROR, "仓库不存在或不属于当前租户");
         }
-        if (ret.getCustomerId() != null && customerMapper.selectById(ret.getCustomerId()) == null) {
+        if (ret.getCustomerId() == null) {
+            throw new BusinessException(ErrorCode.VALIDATE_ERROR, "退货客户不能为空");
+        }
+        if (customerMapper.selectById(ret.getCustomerId()) == null) {
             throw new BusinessException(ErrorCode.VALIDATE_ERROR, "客户不存在或不属于当前租户");
         }
         for (SalesReturnItem item : items) {
