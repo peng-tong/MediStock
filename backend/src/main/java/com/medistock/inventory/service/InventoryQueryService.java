@@ -3,6 +3,9 @@ package com.medistock.inventory.service;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.medistock.base.entity.Drug;
+import com.medistock.common.constant.BizConstant;
+import com.medistock.common.exception.BusinessException;
+import com.medistock.common.exception.ErrorCode;
 import com.medistock.common.service.NameResolver;
 import com.medistock.inventory.entity.InventoryFlow;
 import com.medistock.inventory.entity.Stock;
@@ -29,6 +32,9 @@ public class InventoryQueryService {
     private final NameResolver nameResolver;
     private final com.medistock.base.mapper.DrugMapper drugMapper;
 
+    /** 批次效期筛选白名单（问题 80）：非法 level 此前被静默忽略，现统一返回 400 */
+    private static final java.util.Set<String> LEVELS = java.util.Set.of("expired", "90", "30", "low");
+
     public Page<Stock> pageStock(int page, int pageSize, Long drugId, Long warehouseId, String keyword) {
         LambdaQueryWrapper<Stock> qw = new LambdaQueryWrapper<>();
         if (drugId != null) qw.eq(Stock::getDrugId, drugId);
@@ -51,6 +57,7 @@ public class InventoryQueryService {
             if (d != null) {
                 s.setDrugName(d.getGenericName());
                 s.setSpec(d.getSpec());
+                s.setMinStock(d.getMinStock());
             }
             s.setWarehouseName(warehouses.get(s.getWarehouseId()));
         });
@@ -59,6 +66,10 @@ public class InventoryQueryService {
 
     public Page<StockBatch> pageBatch(int page, int pageSize, Long drugId, Long warehouseId,
                                       String keyword, String level) {
+        // 效期筛选参数校验：仅允许 expired / 90 / 30 / low，其余值明确报 400（不再静默返回全量数据）
+        if (level != null && !level.isBlank() && !LEVELS.contains(level)) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "非法的效期筛选参数");
+        }
         LambdaQueryWrapper<StockBatch> qw = new LambdaQueryWrapper<>();
         if (drugId != null) qw.eq(StockBatch::getDrugId, drugId);
         if (warehouseId != null) qw.eq(StockBatch::getWarehouseId, warehouseId);
@@ -74,11 +85,13 @@ public class InventoryQueryService {
         // 效期筛选：expired 已过期 / 90 近效期90天 / 30 近效期30天 / low 低于库存下限
         java.time.LocalDate today = java.time.LocalDate.now();
         if ("expired".equals(level)) {
-            qw.lt(StockBatch::getExpiryDate, today);
+            // 效期口径：有效期至当天也算过期（与出库拦截口径保持一致，避免当天到期批次漏报）
+            qw.le(StockBatch::getExpiryDate, today);
         } else if ("90".equals(level)) {
-            qw.between(StockBatch::getExpiryDate, today, today.plusDays(90));
+            // 近效期窗口从「明天」开始，避免当天到期批次同时出现在 expired 与 90 两个筛选结果中
+            qw.gt(StockBatch::getExpiryDate, today).le(StockBatch::getExpiryDate, today.plusDays(90));
         } else if ("30".equals(level)) {
-            qw.between(StockBatch::getExpiryDate, today, today.plusDays(30));
+            qw.gt(StockBatch::getExpiryDate, today).le(StockBatch::getExpiryDate, today.plusDays(30));
         } else if ("low".equals(level)) {
             List<Long> lowIds = drugIdsBelowMinStock();
             if (lowIds.isEmpty()) return new Page<>(page, pageSize);
@@ -88,10 +101,15 @@ public class InventoryQueryService {
         Page<StockBatch> p = batchMapper.selectPage(new Page<>(page, pageSize), qw);
         List<StockBatch> list = p.getRecords();
         if (list.isEmpty()) return p;
-        Map<Long, String> drugs = nameResolver.drugNames(ids(list, StockBatch::getDrugId));
+        // 批量补药品名/库存下限与仓库名（minStock 供预警中心「生成采购」判断）
+        Map<Long, Drug> drugMap = nameResolver.drugs(ids(list, StockBatch::getDrugId));
         Map<Long, String> warehouses = nameResolver.warehouseNames(ids(list, StockBatch::getWarehouseId));
         list.forEach(b -> {
-            b.setDrugName(drugs.get(b.getDrugId()));
+            Drug d = drugMap.get(b.getDrugId());
+            if (d != null) {
+                b.setDrugName(d.getGenericName());
+                b.setMinStock(d.getMinStock());
+            }
             b.setWarehouseName(warehouses.get(b.getWarehouseId()));
         });
         return p;
@@ -99,6 +117,14 @@ public class InventoryQueryService {
 
     public Page<InventoryFlow> pageFlow(int page, int pageSize, Long drugId, Long warehouseId,
                                         Integer businessType, LocalDateTime start, LocalDateTime end) {
+        // 非法业务类型直接报错：1~5 为现行流水类型（FLOW_INBOUND=1 ~ FLOW_STOCKTAKE=5），避免非法值静默返回空列表
+        if (businessType != null && (businessType < BizConstant.FLOW_INBOUND || businessType > BizConstant.FLOW_STOCKTAKE)) {
+            throw new BusinessException(ErrorCode.VALIDATE_ERROR, "非法的流水业务类型");
+        }
+        // 日期区间倒挂直接报错：此前 start>end 静默返回空列表，调用方无法区分「无数据」与「参数错误」
+        if (start != null && end != null && start.isAfter(end)) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "开始时间不能晚于结束时间");
+        }
         LambdaQueryWrapper<InventoryFlow> qw = new LambdaQueryWrapper<>();
         if (drugId != null) qw.eq(InventoryFlow::getDrugId, drugId);
         if (warehouseId != null) qw.eq(InventoryFlow::getWarehouseId, warehouseId);
@@ -132,14 +158,22 @@ public class InventoryQueryService {
         return list.stream().map(getter).filter(java.util.Objects::nonNull).distinct().collect(Collectors.toList());
     }
 
-    /** 关键字匹配药品 id：通用名 / 商品名 模糊匹配 */
+    /** 关键字匹配药品 id：通用名 / 商品名 / 批号 模糊匹配（库存查询占位符承诺支持批号） */
     private List<Long> drugIdsByKeyword(String keyword) {
-        return drugMapper.selectList(new LambdaQueryWrapper<Drug>()
+        List<Long> ids = new java.util.ArrayList<>(drugMapper.selectList(new LambdaQueryWrapper<Drug>()
                         .select(Drug::getId)
                         .like(Drug::getGenericName, keyword)
                         .or()
                         .like(Drug::getTradeName, keyword))
-                .stream().map(Drug::getId).collect(Collectors.toList());
+                .stream().map(Drug::getId).collect(Collectors.toList()));
+        // 批号命中的药品也要进入库存结果集（此前库存页按批号搜索恒为空）
+        batchMapper.selectList(new LambdaQueryWrapper<StockBatch>()
+                        .select(StockBatch::getDrugId)
+                        .like(StockBatch::getBatchNo, keyword))
+                .forEach(b -> {
+                    if (!ids.contains(b.getDrugId())) ids.add(b.getDrugId());
+                });
+        return ids;
     }
 
     /** 低于库存下限的药品 id：按批次库存汇总后与药品下限比较 */

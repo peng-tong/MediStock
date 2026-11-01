@@ -3,6 +3,7 @@ package com.medistock.inventory.controller;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.medistock.common.result.PageResult;
 import com.medistock.common.result.Result;
+import com.medistock.common.util.PageUtil;
 import com.medistock.inventory.entity.Stocktake;
 import com.medistock.inventory.service.StocktakeService;
 import lombok.RequiredArgsConstructor;
@@ -27,7 +28,7 @@ public class StocktakeController {
     @GetMapping
     public Result<PageResult<Stocktake>> page(@RequestParam(defaultValue = "1") int page,
                                               @RequestParam(defaultValue = "10") int pageSize) {
-        Page<Stocktake> p = service.pageQuery(page, pageSize);
+        Page<Stocktake> p = service.pageQuery(PageUtil.page(page), PageUtil.pageSize(pageSize));
         return Result.ok(new PageResult<>(p.getTotal(), p.getRecords()));
     }
 
@@ -37,7 +38,8 @@ public class StocktakeController {
     @PutMapping("/{id}/items/{itemId}")
     public Result<Void> updateActual(@PathVariable Long id, @PathVariable Long itemId,
                                      @RequestParam BigDecimal actualQuantity) {
-        service.updateActual(itemId, actualQuantity);
+        // 必须把路径中的盘点单 id 一并传给服务层校验，防止通过篡改 itemId 修改其他盘点单明细
+        service.updateActual(id, itemId, actualQuantity);
         return Result.ok();
     }
 
@@ -45,5 +47,5 @@ public class StocktakeController {
     public Result<Void> confirm(@PathVariable Long id) { service.confirm(id); return Result.ok(); }
 
     @DeleteMapping("/{id}")
-    public Result<Void> cancel(@PathVariable Long id) { service.removeById(id); return Result.ok(); }
+    public Result<Void> cancel(@PathVariable Long id) { service.cancel(id); return Result.ok(); }
 }

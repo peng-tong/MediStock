@@ -23,6 +23,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
@@ -57,6 +58,8 @@ public class StockService {
     }
 
     private static final AtomicLong SEQ = new AtomicLong();
+    /** 流水号时间部分：精确到毫秒，避免进程重启后 SEQ 归零导致同日流水号重复 */
+    private static final DateTimeFormatter FLOW_TIME = DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS");
 
     // ==================== 对外原语 ====================
 
@@ -256,8 +259,9 @@ public class StockService {
     private void insertFlow(int businessType, String businessNo, Long drugId, Long warehouseId,
                             StockBatch batch, BigDecimal changeQty, String remark) {
         InventoryFlow flow = new InventoryFlow();
-        flow.setFlowNo("FL" + LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"))
-                + String.format("%06d", SEQ.incrementAndGet()));
+        // 流水号 = FL + 毫秒级时间 + 进程内序号：SEQ 重启会归零，仅用日期+序号会产生重复流水号
+        flow.setFlowNo("FL" + LocalDateTime.now().format(FLOW_TIME)
+                + String.format("%03d", SEQ.incrementAndGet() % 1000));
         flow.setBusinessType(businessType);
         flow.setBusinessNo(businessNo);
         flow.setDrugId(drugId);

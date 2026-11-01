@@ -3,6 +3,7 @@ package com.medistock.inventory.controller;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.medistock.common.result.PageResult;
 import com.medistock.common.result.Result;
+import com.medistock.common.util.PageUtil;
 import com.medistock.inventory.entity.InventoryFlow;
 import com.medistock.inventory.entity.Stock;
 import com.medistock.inventory.entity.StockBatch;
@@ -30,7 +31,7 @@ public class InventoryController {
                                             @RequestParam(required = false) Long drugId,
                                             @RequestParam(required = false) Long warehouseId,
                                             @RequestParam(required = false) String keyword) {
-        Page<Stock> p = queryService.pageStock(page, pageSize, drugId, warehouseId, keyword);
+        Page<Stock> p = queryService.pageStock(PageUtil.page(page), PageUtil.pageSize(pageSize), drugId, warehouseId, keyword);
         return Result.ok(new PageResult<>(p.getTotal(), p.getRecords()));
     }
 
@@ -42,7 +43,7 @@ public class InventoryController {
                                                   @RequestParam(required = false) String keyword,
                                                   // 效期筛选：90 / 30 / expired / low
                                                   @RequestParam(required = false) String level) {
-        Page<StockBatch> p = queryService.pageBatch(page, pageSize, drugId, warehouseId, keyword, level);
+        Page<StockBatch> p = queryService.pageBatch(PageUtil.page(page), PageUtil.pageSize(pageSize), drugId, warehouseId, keyword, level);
         return Result.ok(new PageResult<>(p.getTotal(), p.getRecords()));
     }
 
@@ -55,7 +56,7 @@ public class InventoryController {
                                                    // ISO 格式绑定：query string 形如 2026-10-29T00:00:00
                                                    @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime start,
                                                    @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime end) {
-        Page<InventoryFlow> p = queryService.pageFlow(page, pageSize, drugId, warehouseId, businessType, start, end);
+        Page<InventoryFlow> p = queryService.pageFlow(PageUtil.page(page), PageUtil.pageSize(pageSize), drugId, warehouseId, businessType, start, end);
         return Result.ok(new PageResult<>(p.getTotal(), p.getRecords()));
     }
 }

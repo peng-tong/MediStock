@@ -3,6 +3,7 @@ package com.medistock.inventory.service;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.medistock.base.mapper.WarehouseMapper;
 import com.medistock.common.config.TenantContext;
 import com.medistock.common.config.UserContext;
 import com.medistock.common.constant.BizConstant;
@@ -29,16 +30,19 @@ public class StocktakeService extends ServiceImpl<StocktakeMapper, Stocktake> {
     private final StocktakeItemMapper itemMapper;
     private final StockBatchMapper batchMapper;
     private final StockService stockService;
+    private final WarehouseMapper warehouseMapper;
     private final com.medistock.common.service.NameResolver nameResolver;
 
     public StocktakeService(StocktakeMapper stocktakeMapper, StocktakeItemMapper itemMapper,
                             StockBatchMapper batchMapper, StockService stockService,
+                            WarehouseMapper warehouseMapper,
                             com.medistock.common.service.NameResolver nameResolver) {
         // ServiceImpl 在 MP 3.5.7 无带参构造器，直接为 protected baseMapper 赋值（同 Phase 1 UserService 修正方式）
         this.baseMapper = stocktakeMapper;
         this.itemMapper = itemMapper;
         this.batchMapper = batchMapper;
         this.stockService = stockService;
+        this.warehouseMapper = warehouseMapper;
         this.nameResolver = nameResolver;
     }
 
@@ -109,6 +113,14 @@ public class StocktakeService extends ServiceImpl<StocktakeMapper, Stocktake> {
     /** 创建盘点单：快照该仓库所有批次为账面数 */
     @Transactional
     public Long createStocktake(Long warehouseId, String remark) {
+        // 防脏数据/NPE：仓库必填（后续按 warehouseId 查批次快照，null 会查全库）
+        if (warehouseId == null) {
+            throw new BusinessException(ErrorCode.VALIDATE_ERROR, "仓库不能为空");
+        }
+        // 问题 77：盘点仓库必须存在且属于当前租户（selectById 受租户拦截器过滤，跨租户返回 null）
+        if (warehouseMapper.selectById(warehouseId) == null) {
+            throw new BusinessException(ErrorCode.VALIDATE_ERROR, "仓库不存在或不属于当前租户");
+        }
         Stocktake st = new Stocktake();
         st.setTakeNo("ST" + LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"))
                 + String.format("%03d", this.count(null) + 1));
@@ -137,15 +149,30 @@ public class StocktakeService extends ServiceImpl<StocktakeMapper, Stocktake> {
         return st.getId();
     }
 
+    /** 实盘数量上限：与库存表 DECIMAL(18,4) 的存储精度保持一致，防止超大数导致库存异常膨胀 */
+    private static final BigDecimal MAX_ACTUAL = new BigDecimal("99999999999999.9999");
+
     /** 录入实盘数量（仅允许 status==0 的进行中盘点单） */
-    public void updateActual(Long itemId, BigDecimal actualQuantity) {
+    public void updateActual(Long takeId, Long itemId, BigDecimal actualQuantity) {
         // 入口防呆：实盘数量为空时直接拦截，避免后续 NPE（bookQuantity 相减）
         if (actualQuantity == null) {
             throw new BusinessException(ErrorCode.VALIDATE_ERROR, "实盘数量不能为空");
         }
+        // 负数实盘拦截：账面只能减到 0，不允许录负数（仅 confirm 拦会漏掉「先录负数再确认」的路径）
+        if (actualQuantity.compareTo(BigDecimal.ZERO) < 0) {
+            throw new BusinessException(ErrorCode.VALIDATE_ERROR, "实盘数量不能为负数");
+        }
+        // 精度/上限校验：超过 DECIMAL(18,4) 存储范围或小数位超过 4 位会静默丢精度，直接拒绝
+        if (actualQuantity.scale() > 4 || actualQuantity.compareTo(MAX_ACTUAL) > 0) {
+            throw new BusinessException(ErrorCode.VALIDATE_ERROR, "实盘数量超出允许范围（最多 4 位小数）");
+        }
         StocktakeItem item = itemMapper.selectById(itemId);
         if (item == null) {
             throw new BusinessException(ErrorCode.NOT_FOUND);
+        }
+        // 路径盘点单 id 必须与明细所属盘点单一致：此前忽略路径 id，可通过 /18/items/30 篡改 19 号单明细
+        if (!item.getTakeId().equals(takeId)) {
+            throw new BusinessException(ErrorCode.NOT_FOUND, "盘点明细不属于该盘点单");
         }
         Stocktake st = this.getById(item.getTakeId());
         if (st == null || st.getStatus() != 0) {
@@ -160,11 +187,19 @@ public class StocktakeService extends ServiceImpl<StocktakeMapper, Stocktake> {
     @Transactional
     public void confirm(Long takeId) {
         Stocktake st = this.getById(takeId);
-        if (st == null || st.getStatus() != 0) {
+        // 不存在的盘点单返回 404，与详情/取消接口语义一致（此前误报为「状态不允许」）
+        if (st == null) {
+            throw new BusinessException(ErrorCode.NOT_FOUND, "盘点单不存在");
+        }
+        if (st.getStatus() != 0) {
             throw new BusinessException(ErrorCode.ORDER_STATUS_INVALID);
         }
         List<StocktakeItem> items = itemMapper.selectList(
                 new LambdaQueryWrapper<StocktakeItem>().eq(StocktakeItem::getTakeId, takeId));
+        // 空盘点单（无任何明细）禁止确认：如 warehouseId 不存在的仓库快照不出批次
+        if (items.isEmpty()) {
+            throw new BusinessException(ErrorCode.VALIDATE_ERROR, "盘点单无明细，禁止确认");
+        }
         // 防漏录：存在未录入实盘的明细时禁止确认
         for (StocktakeItem item : items) {
             if (item.getActualQuantity() == null) {
@@ -178,6 +213,21 @@ public class StocktakeService extends ServiceImpl<StocktakeMapper, Stocktake> {
             }
         }
         st.setStatus(1);
+        this.updateById(st);
+    }
+
+    /** 取消盘点单：不物理删除（防单号复用，审计流水可追溯），仅置为已取消(status=2) */
+    public void cancel(Long id) {
+        Stocktake st = this.getById(id);
+        if (st == null) {
+            throw new BusinessException(ErrorCode.NOT_FOUND, "盘点单不存在");
+        }
+        // 已确认(status=1)的单据已生成库存调整流水，禁止删除/取消
+        if (st.getStatus() != null && st.getStatus() == 1) {
+            throw new BusinessException(ErrorCode.ORDER_STATUS_INVALID, "已确认的盘点单不能删除");
+        }
+        // 进行中(0)/已取消(2) 均允许置为已取消，保留记录防单号复用
+        st.setStatus(2);
         this.updateById(st);
     }
 }

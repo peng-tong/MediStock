@@ -33,4 +33,7 @@ public class StockBatch extends BaseEntity {
     private String drugName;
     @TableField(exist = false)
     private String warehouseName;
+    /** 展示字段：药品库存下限（预警中心「生成采购」判断依据，按药品回填） */
+    @TableField(exist = false)
+    private BigDecimal minStock;
 }

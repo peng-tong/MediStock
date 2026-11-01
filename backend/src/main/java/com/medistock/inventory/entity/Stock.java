@@ -33,4 +33,7 @@ public class Stock extends BaseEntity {
     /** 展示字段：仓库名称 */
     @TableField(exist = false)
     private String warehouseName;
+    /** 展示字段：药品库存下限（预警标签依据，列表查询时按药品回填） */
+    @TableField(exist = false)
+    private BigDecimal minStock;
 }
