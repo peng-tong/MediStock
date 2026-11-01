@@ -6,6 +6,7 @@ import com.medistock.common.exception.BusinessException;
 import com.medistock.common.exception.ErrorCode;
 import com.medistock.common.result.PageResult;
 import com.medistock.common.result.Result;
+import com.medistock.common.util.PageUtil;
 import com.medistock.sales.entity.SalesReturn;
 import com.medistock.sales.service.SalesReturnService;
 import jakarta.validation.Valid;
@@ -33,7 +34,7 @@ public class SalesReturnController {
         LambdaQueryWrapper<SalesReturn> qw = new LambdaQueryWrapper<>();
         if (status != null) qw.eq(SalesReturn::getStatus, status);
         qw.orderByDesc(SalesReturn::getId);
-        Page<SalesReturn> p = service.page(new Page<>(page, pageSize), qw);
+        Page<SalesReturn> p = service.page(new Page<>(PageUtil.page(page), PageUtil.pageSize(pageSize)), qw);
         // 列表回填客户名称（一次批量查询）
         java.util.Map<Long, String> customers = nameResolver.customerNames(
                 p.getRecords().stream().map(SalesReturn::getCustomerId).toList());
