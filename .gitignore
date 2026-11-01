@@ -10,6 +10,12 @@ Thumbs.db
 # 日志
 *.log
 
+# 测试临时产物（黑盒测试脚本、token、草稿，禁止入库）
+.ms-test/
+.test_token.txt
+测试发现草稿.md
+测试清单.md
+
 /.pnpm-store
 /frontend/node_modules
 /frontend/dist
