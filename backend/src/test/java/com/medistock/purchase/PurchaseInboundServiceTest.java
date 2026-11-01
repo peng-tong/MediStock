@@ -63,6 +63,9 @@ class PurchaseInboundServiceTest {
             item.setQuantity(new BigDecimal("30"));
             item.setPurchasePrice(new BigDecimal("5"));
             Long orderId = orderService.createOrder(order, List.of(item));
+            // 入库前走状态流转：提交 → 审核通过（生产代码要求仅审核通过的采购单可入库）
+            orderService.submitOrder(orderId);
+            orderService.approveOrder(orderId);
 
             PurchaseOrderItem savedItem = orderService.listItems(orderId).get(0);
             InboundReq.Item in = new InboundReq.Item();

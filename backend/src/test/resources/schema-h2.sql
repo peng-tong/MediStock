@@ -162,6 +162,33 @@ CREATE TABLE IF NOT EXISTS base_warehouse (
     update_time DATETIME
 );
 
+-- 测试种子基础资料：供应商/仓库/客户（租户1），供采购单/销售单创建的外键存在性校验引用。
+-- 幂等写法：多 Spring 上下文（如 MybatisPlusConfigTest 的独立配置）重跑 schema 时不撞唯一键。
+INSERT INTO base_supplier (id, tenant_id, name, code, status, deleted)
+SELECT 1, 1, '测试供应商', 'T-SUP-1', 1, 0 WHERE NOT EXISTS (SELECT 1 FROM base_supplier WHERE id = 1);
+INSERT INTO base_warehouse (id, tenant_id, name, code, status, deleted)
+SELECT 1, 1, '测试仓库', 'T-WH-1', 1, 0 WHERE NOT EXISTS (SELECT 1 FROM base_warehouse WHERE id = 1);
+INSERT INTO base_warehouse (id, tenant_id, name, code, status, deleted)
+SELECT 9202, 1, '入库测试仓库', 'T-WH-IN', 1, 0 WHERE NOT EXISTS (SELECT 1 FROM base_warehouse WHERE id = 9202);
+INSERT INTO base_customer (id, tenant_id, name, code, status, deleted)
+SELECT 1, 1, '测试客户', 'T-CUS-1', 1, 0 WHERE NOT EXISTS (SELECT 1 FROM base_customer WHERE id = 1);
+-- 药品种子：采购/销售/退货/盘点用例中的 drugId 需通过「存在且属于当前租户」校验（问题 77）
+INSERT INTO base_drug (id, tenant_id, generic_name, status, deleted)
+SELECT 1, 1, '测试药品一', 1, 0 WHERE NOT EXISTS (SELECT 1 FROM base_drug WHERE id = 1);
+INSERT INTO base_drug (id, tenant_id, generic_name, status, deleted)
+SELECT 2, 1, '测试药品二', 1, 0 WHERE NOT EXISTS (SELECT 1 FROM base_drug WHERE id = 2);
+INSERT INTO base_drug (id, tenant_id, generic_name, status, deleted)
+SELECT 9201, 1, '入库测试药品', 1, 0 WHERE NOT EXISTS (SELECT 1 FROM base_drug WHERE id = 9201);
+INSERT INTO base_drug (id, tenant_id, generic_name, status, deleted)
+SELECT 9101, 1, '盘点测试药品', 1, 0 WHERE NOT EXISTS (SELECT 1 FROM base_drug WHERE id = 9101);
+INSERT INTO base_drug (id, tenant_id, generic_name, status, deleted)
+SELECT 9301, 1, '出库测试药品', 1, 0 WHERE NOT EXISTS (SELECT 1 FROM base_drug WHERE id = 9301);
+-- 仓库种子：出库/盘点用例使用的仓库 ID
+INSERT INTO base_warehouse (id, tenant_id, name, code, status, deleted)
+SELECT 9302, 1, '出库测试仓库', 'T-WH-OUT', 1, 0 WHERE NOT EXISTS (SELECT 1 FROM base_warehouse WHERE id = 9302);
+INSERT INTO base_warehouse (id, tenant_id, name, code, status, deleted)
+SELECT 9102, 1, '盘点测试仓库', 'T-WH-ST', 1, 0 WHERE NOT EXISTS (SELECT 1 FROM base_warehouse WHERE id = 9102);
+
 -- 采购：采购单
 CREATE TABLE IF NOT EXISTS purchase_order (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,

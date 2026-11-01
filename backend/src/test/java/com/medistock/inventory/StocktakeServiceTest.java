@@ -63,7 +63,8 @@ class StocktakeServiceTest {
                     .eq(StocktakeItem::getTakeId, takeId).eq(StocktakeItem::getDrugId, DRUG_ID));
             assertThat(item.getBookQuantity()).isEqualByComparingTo("100");
 
-            stocktakeService.updateActual(item.getId(), new BigDecimal("120"));
+            // 第五轮起 updateActual 增加 takeId 入参，校验明细必须属于该盘点单
+            stocktakeService.updateActual(takeId, item.getId(), new BigDecimal("120"));
             stocktakeService.confirm(takeId);
 
             // 差异 +20 已同步到汇总库存

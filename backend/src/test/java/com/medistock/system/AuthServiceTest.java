@@ -48,6 +48,8 @@ class AuthServiceTest {
             TenantContext.setTenantId(tenant.getId());
             User u = new User();
             u.setUsername("auth_" + System.currentTimeMillis());
+            // 第五轮起「姓名」为必填（与前端 User.vue 的必填校验一致）
+            u.setRealName("认证测试用户");
             userService.createUser(u, "pass123456");
 
             // 预置验证码（login 为公开接口，模拟真实 HTTP 场景清空上下文）
@@ -106,11 +108,13 @@ class AuthServiceTest {
             TenantContext.setTenantId(t1.getId());
             User u1 = new User();
             u1.setUsername(dupUsername);
+            u1.setRealName("同名用户A");
             userService.createUser(u1, "pass-a");
 
             TenantContext.setTenantId(t2.getId());
             User u2 = new User();
             u2.setUsername(dupUsername);
+            u2.setRealName("同名用户B");
             userService.createUser(u2, "pass-b");
 
             // 用租户 A 用户的密码登录。login 是公开接口（无租户上下文），

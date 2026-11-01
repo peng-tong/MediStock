@@ -25,5 +25,5 @@ mybatis-plus:
       id-type: auto
 
 jwt:
-  secret: ${JWT_SECRET:wRut+ppOLRV5ZQ7d2tdgE1v6aFOt8zPOZ+BsGavjl+Zl0zsOTRJGUjB4rtLYtBDH}
+  secret: ${JWT_SECRET:}
   expire-hours: 24

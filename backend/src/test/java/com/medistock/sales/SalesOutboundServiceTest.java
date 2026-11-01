@@ -75,6 +75,8 @@ class SalesOutboundServiceTest {
             item.setSalePrice(new BigDecimal("10"));
             item.setAmount(new BigDecimal("120"));
             Long orderId = orderService.createOrder(order, List.of(item));
+            // 出库前走状态流转：提交（生产代码要求仅待出库 status=1 的销售单可出库）
+            orderService.submitOrder(orderId);
 
             outboundService.outbound(orderId);
 
@@ -105,6 +107,7 @@ class SalesOutboundServiceTest {
             item.setSalePrice(new BigDecimal("10"));
             item.setAmount(new BigDecimal("10"));
             Long orderId = orderService.createOrder(order, List.of(item));
+            orderService.submitOrder(orderId);
 
             // 断言具体错误码：过期批次不可出库 → 报 STOCK_INSUFFICIENT（负库存/无可用批次拦截）
             assertThatThrownBy(() -> outboundService.outbound(orderId))
@@ -146,6 +149,7 @@ class SalesOutboundServiceTest {
                         it.setSalePrice(new BigDecimal("10"));
                         it.setAmount(new BigDecimal("100"));
                         Long id = orderService.createOrder(o, List.of(it));
+                        orderService.submitOrder(id);
                         outboundService.outbound(id);
                         success.incrementAndGet();
                     } catch (Exception ignored) {
