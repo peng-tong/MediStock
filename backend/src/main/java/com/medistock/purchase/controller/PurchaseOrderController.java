@@ -3,6 +3,7 @@ package com.medistock.purchase.controller;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.medistock.common.result.PageResult;
 import com.medistock.common.result.Result;
+import com.medistock.common.util.PageUtil;
 import com.medistock.purchase.entity.PurchaseOrder;
 import com.medistock.purchase.service.InboundReq;
 import com.medistock.purchase.service.PurchaseInboundService;
@@ -37,7 +38,7 @@ public class PurchaseOrderController {
                                                   @RequestParam(required = false) String orderNo,
                                                   // 逗号分隔多状态：如 "1,2" 表示待审核+待入库（采购入库页按多状态过滤）
                                                   @RequestParam(required = false) String status) {
-        Page<PurchaseOrder> p = service.pageQuery(page, pageSize, orderNo, status);
+        Page<PurchaseOrder> p = service.pageQuery(PageUtil.page(page), PageUtil.pageSize(pageSize), orderNo, status);
         return Result.ok(new PageResult<>(p.getTotal(), p.getRecords()));
     }
 
@@ -72,7 +73,8 @@ public class PurchaseOrderController {
 
     @PostMapping("/{id}/inbound")
     public Result<Void> inbound(@PathVariable Long id, @RequestBody InboundReq req) {
-        inboundService.inbound(id, req.getItems());
+        // S6 body 可能为 null（空请求体），此时按空明细处理由 service 统一返回 422
+        inboundService.inbound(id, req == null ? null : req.getItems());
         return Result.ok();
     }
 }
