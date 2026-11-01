@@ -4,8 +4,11 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.medistock.base.entity.Supplier;
 import com.medistock.base.service.SupplierService;
+import com.medistock.common.exception.BusinessException;
+import com.medistock.common.exception.ErrorCode;
 import com.medistock.common.result.PageResult;
 import com.medistock.common.result.Result;
+import com.medistock.common.util.PageUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -31,8 +34,18 @@ public class SupplierController {
             qw.eq(Supplier::getStatus, status);
         }
         qw.orderByDesc(Supplier::getId);
-        Page<Supplier> p = service.page(new Page<>(page, pageSize), qw);
+        Page<Supplier> p = service.page(new Page<>(PageUtil.page(page), PageUtil.pageSize(pageSize)), qw);
         return Result.ok(new PageResult<>(p.getTotal(), p.getRecords()));
+    }
+
+    /** 详情：存在返回 200，不存在/跨租户返回 404（补齐此前缺失导致 500 的接口） */
+    @GetMapping("/{id}")
+    public Result<Supplier> detail(@PathVariable Long id) {
+        Supplier s = service.getById(id);
+        if (s == null) {
+            throw new BusinessException(ErrorCode.NOT_FOUND, "供应商不存在");
+        }
+        return Result.ok(s);
     }
 
     @PostMapping
@@ -44,5 +57,5 @@ public class SupplierController {
     }
 
     @DeleteMapping("/{id}")
-    public Result<Void> delete(@PathVariable Long id) { service.removeById(id); return Result.ok(); }
+    public Result<Void> delete(@PathVariable Long id) { service.deleteSupplier(id); return Result.ok(); }
 }
