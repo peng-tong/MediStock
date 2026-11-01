@@ -29,7 +29,10 @@ export const outboundSalesOrder = (id, data) => request.post(`/sales/orders/${id
 export const getSalesReturns = (params) => request.get('/sales/returns', { params })
 export const getSalesReturn = (id) => request.get(`/sales/returns/${id}`)
 export const createSalesReturn = (data) => request.post('/sales/returns', {
-  salesReturn: { customerId: data.customerId, warehouseId: data.warehouseId, remark: data.remark },
+  salesReturn: {
+    orderId: data.orderId, customerId: data.customerId,
+    warehouseId: data.warehouseId, remark: data.remark
+  },
   items: data.items
 })
 

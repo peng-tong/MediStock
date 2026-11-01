@@ -10,8 +10,15 @@
 
     <!-- 新建销售退货单弹窗 -->
     <Modal :visible="formVisible" title="新建退货单" @close="formVisible = false">
-      <!-- 单据头：客户 / 回补仓库 -->
+      <!-- 单据头：关联销售单（选填）/ 客户 / 回补仓库 -->
       <div class="form-grid">
+        <div class="f-item">
+          <label>关联销售单</label>
+          <select v-model="form.orderId" @change="pickOrder">
+            <option :value="null">不关联（直接退货）</option>
+            <option v-for="o in outboundOrders" :key="o.id" :value="o.id">{{ o.orderNo }}（{{ o.customerName || '-' }}）</option>
+          </select>
+        </div>
         <div class="f-item">
           <label>客户 *</label>
           <select v-model="form.customerId">
@@ -21,13 +28,15 @@
         </div>
         <div class="f-item">
           <label>回补仓库</label>
-          <select v-model="form.warehouseId">
+          <!-- 切换仓库后清空明细已选批次，批次必须与回补仓库一致（后端强制校验） -->
+          <select v-model="form.warehouseId" @change="form.items.forEach(it => it.batchId = null)">
             <option :value="null" disabled>请选择仓库</option>
             <option v-for="w in warehouseOptions" :key="w.id" :value="w.id">{{ w.name }}</option>
           </select>
         </div>
         <div class="f-item" style="grid-column:span 3"><label>备注</label><input v-model.trim="form.remark" placeholder="退货原因说明"></div>
       </div>
+      <div v-if="form.orderId" class="note warn" style="margin-top:10px">已关联销售单「{{ selectedOrderNo }}」：退货数量不能超过该单已出库数量（退不能超过卖）</div>
 
       <!-- 明细行：药品 + 批号 + 数量 + 退货单价 + 金额自动 -->
       <div class="tbl-wrap" style="margin-top:16px">
@@ -38,14 +47,15 @@
           <tbody>
             <tr v-for="(it, i) in form.items" :key="i">
               <td>
-                <select v-model="it.drugId" style="height:32px;border:1.5px solid var(--line);border-radius:8px;padding:0 8px;font-size:12.5px;width:190px">
+                <!-- 换药品时清空已选批次，避免残留其他药品批次导致后端校验失败 -->
+                <select v-model="it.drugId" @change="it.batchId = null" style="height:32px;border:1.5px solid var(--line);border-radius:8px;padding:0 8px;font-size:12.5px;width:190px">
                   <option :value="null" disabled>请选择药品</option>
                   <option v-for="d in drugOptions" :key="d.id" :value="d.id">{{ d.genericName }} {{ d.spec || '' }}</option>
                 </select>
               </td>
               <td>
                 <select v-model="it.batchId" style="height:32px;border:1.5px solid var(--line);border-radius:8px;padding:0 8px;font-size:12.5px;width:190px">
-                  <option :value="null" disabled>选择批次</option>
+                  <option :value="null" disabled>{{ form.warehouseId ? '选择批次' : '请先选择回补仓库' }}</option>
                   <option v-for="b in batchesFor(it.drugId)" :key="b.id" :value="b.id">{{ b.batchNo }}（效期 {{ b.expiryDate || '-' }}｜余 {{ b.quantity }}）</option>
                 </select>
               </td>
@@ -81,7 +91,7 @@ import { computed, reactive, ref } from 'vue'
 import PageCard from '../../components/PageCard.vue'
 import DataTable from '../../components/DataTable.vue'
 import Modal from '../../components/Modal.vue'
-import { getSalesReturns, createSalesReturn, getCustomerOptions } from '../../api/sales'
+import { getSalesReturns, createSalesReturn, getSalesOrders, getCustomerOptions } from '../../api/sales'
 import { getStockBatches } from '../../api/inventory'
 import { getWarehouseOptions, getDrugOptions } from '../../api/purchase'
 import { notifySuccess, notifyError } from '../../utils/notify'
@@ -130,10 +140,20 @@ const warehouseOptions = ref([])
 const drugOptions = ref([])
 // 批次来自后端真实库存（返还需要回补指定批次）
 const batchOptions = ref([])
-// 按药品过滤可选批次
+// 已出库销售单列表（供「关联销售单」选择，关联后后端校验退不能超过卖）
+const outboundOrders = ref([])
+const selectedOrderNo = ref('')
+// 按药品 + 回补仓库过滤可选批次：批次库存是「药品+仓库」维度，跨仓批次后端会拒绝
+// 未选仓库时返回空列表，引导用户先选仓库，避免选到不可回补的批次
 function batchesFor(drugId) {
-  if (!drugId) return batchOptions.value
-  return batchOptions.value.filter(b => b.drugId === drugId)
+  if (!drugId || !form.warehouseId) return []
+  return batchOptions.value.filter(b => b.drugId === drugId && b.warehouseId === form.warehouseId)
+}
+// 选中销售单：自动带出该单客户，避免手动重复选择
+function pickOrder() {
+  const o = outboundOrders.value.find(x => x.id === Number(form.orderId))
+  selectedOrderNo.value = o ? o.orderNo : ''
+  if (o && o.customerId) form.customerId = o.customerId
 }
 
 async function loadOptions() {
@@ -171,15 +191,23 @@ async function loadOptions() {
   } catch (e) {
     batchOptions.value = []
   }
+  // 已出库销售单（status=3），供退货关联（退不能超过卖由后端校验）
+  try {
+    const orders = await getSalesOrders({ status: 3, page: 1, pageSize: 100 })
+    outboundOrders.value = (orders && orders.list) || []
+  } catch (e) {
+    outboundOrders.value = []
+  }
 }
 loadOptions()
 
 // ---------- 弹窗表单 ----------
 const formVisible = ref(false)
-const form = reactive({ customerId: null, warehouseId: null, remark: '', items: [] })
+const form = reactive({ orderId: null, customerId: null, warehouseId: null, remark: '', items: [] })
 
 function openForm() {
-  Object.assign(form, { customerId: null, warehouseId: null, remark: '', items: [{ drugId: null, batchId: null, quantity: 1, returnPrice: 0 }] })
+  Object.assign(form, { orderId: null, customerId: null, warehouseId: null, remark: '', items: [{ drugId: null, batchId: null, quantity: 1, returnPrice: 0 }] })
+  selectedOrderNo.value = ''
   formVisible.value = true
 }
 
@@ -198,6 +226,7 @@ async function save() {
   if (!form.customerId) return notifyError('请选择客户')
   if (!form.items.length || form.items.some(it => !it.drugId || !it.batchId)) return notifyError('请至少填写一行 药品 + 批次 明细')
   const payload = {
+    orderId: form.orderId,
     customerId: form.customerId,
     warehouseId: form.warehouseId,
     remark: form.remark,

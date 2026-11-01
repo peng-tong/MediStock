@@ -19,7 +19,7 @@
     <DataTable ref="tableRef" :columns="columns" :fetch="fetchData" :mock="mockData" :query="query">
       <template #actions="{ row }">
         <button class="btn btn-sm" @click="openForm(row)">编辑</button>
-        <button class="btn btn-sm-danger" @click="remove(row)">删除</button>
+        <button class="btn btn-sm-danger" :disabled="deleting" @click="remove(row)">删除</button>
       </template>
     </DataTable>
 
@@ -35,7 +35,7 @@
       </div>
       <template #footer>
         <button class="btn btn-ghost" @click="formVisible = false">取消</button>
-        <button class="btn btn-primary" @click="save">保存</button>
+        <button class="btn btn-primary" :disabled="saving" @click="save">保存</button>
       </template>
     </Modal>
   </div>
@@ -48,7 +48,7 @@ import PageCard from '../../components/PageCard.vue'
 import DataTable from '../../components/DataTable.vue'
 import Modal from '../../components/Modal.vue'
 import { getCategories, createCategory, updateCategory, deleteCategory } from '../../api/base'
-import { notifySuccess, notifyError } from '../../utils/notify'
+import { notifySuccess, notifyError, confirmDelete } from '../../utils/notify'
 
 const tableRef = ref()
 // 查询条件（传给 DataTable，变化自动刷新）
@@ -79,6 +79,9 @@ const mockData = [
 
 // ---------- 弹窗表单 ----------
 const formVisible = ref(false)
+// 保存/删除进行中标记：按钮禁用 + 方法入口拦截，防止重复点击产生重复提交
+const saving = ref(false)
+const deleting = ref(false)
 const form = reactive({ id: null, name: '', code: '', sort: 1, status: 1 })
 
 // 打开表单：新增为空表单，编辑回填
@@ -89,7 +92,9 @@ function openForm(row) {
 
 // 保存：新增/编辑走接口
 async function save() {
+  if (saving.value) return
   if (!form.name || !form.code) return notifyError('分类名称与编码必填')
+  saving.value = true
   try {
     if (form.id) await updateCategory(form.id, form)
     else await createCategory(form)
@@ -98,17 +103,25 @@ async function save() {
     tableRef.value.reload()
   } catch (e) {
     notifyError(e.message || '保存失败')
+  } finally {
+    saving.value = false
   }
 }
 
-// 删除
+// 删除（先二次确认，防止误点立即物理删除）
 async function remove(row) {
+  if (deleting.value) return
+  deleting.value = true
   try {
+    const ok = await confirmDelete(`确定删除「${row.name || row.id}」吗？删除后不可恢复。`)
+    if (!ok) return
     await deleteCategory(row.id)
     notifySuccess('已删除')
     tableRef.value.reload()
   } catch (e) {
     notifyError(e.message || '删除失败')
+  } finally {
+    deleting.value = false
   }
 }
 </script>

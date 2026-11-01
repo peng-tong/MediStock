@@ -64,9 +64,9 @@
               </td>
               <td style="font-size:12px;line-height:1.6;color:var(--muted);white-space:normal;max-width:240px">
                 <div>{{ batchText(it) }}</div>
-                <!-- 可用库存合计（仅未过期批次）；超量仅提示，保存不拦截，出库时后端会拦截 -->
+                <!-- 可用库存合计（仅未过期批次）；超量提示醒目的红字「库存不足」，保存不拦截，出库时后端会拦截 -->
                 <div v-if="it.drugId" style="margin-top:4px" :style="{ color: overStock(it) ? 'var(--danger)' : 'var(--muted)' }">
-                  可用库存 {{ availableQty(it) }} 盒<template v-if="overStock(it)"> · 已超出，出库时将被拦截</template>
+                  可用库存 {{ availableQty(it) }} 盒<template v-if="overStock(it)"> · <b style="color:var(--danger)">库存不足</b></template>
                 </div>
               </td>
               <td><input type="number" min="0" v-model.number="it.quantity" style="width:64px;height:32px;border:1.5px solid var(--line);border-radius:8px;padding:0 8px;text-align:center"></td>
@@ -110,7 +110,7 @@ import {
 } from '../../api/sales'
 import { getWarehouseOptions, getDrugOptions } from '../../api/purchase'
 import { getStockBatches } from '../../api/inventory'
-import { notifySuccess, notifyError } from '../../utils/notify'
+import { notifySuccess, notifyError, confirmDelete } from '../../utils/notify'
 
 const tableRef = ref()
 const query = reactive({})
@@ -140,7 +140,7 @@ const columns = [
   { title: '销售单号', key: 'orderNo', className: 'mono name', width: '170px' },
   { title: '客户', key: 'customerName' },
   { title: '金额', key: 'totalAmount', render: (r) => fmtMoney(r.totalAmount) },
-  { title: '优惠', key: 'discountAmount', render: (r) => `- ${fmtMoney(r.discountAmount)}` },
+  { title: '优惠', key: 'discountAmount', render: (r) => { const d = Number(r.discountAmount) || 0; return d > 0 ? `- ${fmtMoney(d)}` : '¥ 0' } },
   { title: '状态', key: 'status', width: '90px', tag: (r) => statusTag(Number(r.status)) },
   { title: '日期', key: 'createTime', className: 'dim', render: (r) => String(r.createTime || '').slice(0, 10) },
   { title: '开单人', key: 'createByName', className: 'dim' }
@@ -183,7 +183,8 @@ async function loadOptions() {
   }
   try {
     const data = await getDrugOptions()
-    drugOptions.value = (data && data.list) || []
+    // 停用药品不可开单：仅保留启用（status=1）或未设置状态的药品
+    drugOptions.value = ((data && data.list) || []).filter(d => d.status === 1 || d.status == null)
   } catch (e) {
     drugOptions.value = [
       { id: 1, genericName: '阿莫西林胶囊', spec: '0.25g×24粒' },
@@ -223,10 +224,18 @@ async function openForm(row) {
     saleDate: detail ? String(detail.createTime || todayStr()).slice(0, 10) : todayStr(),
     settlementType: detail ? detail.settlementType || '现结' : '现结',
     salesman: detail ? detail.salesman || '' : '',
-    orderNo: genOrderNo(),
+    // 编辑时必须回显真实单号；新建才生成临时单号（后端会重新生成，仅作展示）
+    orderNo: detail ? (detail.orderNo || genOrderNo()) : genOrderNo(),
     remark: detail ? detail.remark || '' : '',
     items: items.length
-      ? items.map(it => ({ drugId: it.drugId, quantity: it.quantity, salePrice: it.salePrice ?? 0, discount: 1, batches: [] }))
+      ? items.map(it => {
+          // 折扣口径统一：由行实收金额反算折扣系数回填，避免编辑把折扣重置为 1（无折扣），
+          // 否则同一笔单编辑前后出现两种金额（明细级已扣 vs 订单级重算）
+          const q = Number(it.quantity) || 0
+          const p = Number(it.salePrice) || 0
+          const discount = q * p > 0 ? Math.round((Number(it.amount) || 0) / (q * p) * 100) / 100 : 1
+          return { drugId: it.drugId, quantity: it.quantity, salePrice: it.salePrice ?? 0, discount, batches: [] }
+        })
       : [{ drugId: null, quantity: 1, salePrice: 0, discount: 1, batches: [] }]
   })
   formVisible.value = true
@@ -364,8 +373,10 @@ async function outbound(row) {
   }
 }
 
-// 删除销售单
+// 删除销售单（先二次确认，防止误点立即物理删除）
 async function remove(row) {
+  const ok = await confirmDelete(`确定删除销售单「${row.orderNo || row.id}」吗？删除后不可恢复。`)
+  if (!ok) return
   try {
     await deleteSalesOrder(row.id)
     notifySuccess('已删除')

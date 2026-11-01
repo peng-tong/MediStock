@@ -13,7 +13,9 @@
       <template #actions="{ row }">
         <!-- 仅待出库状态可确认出库 -->
         <button v-if="Number(row.status) === 1" class="btn btn-sm" @click="outbound(row)">确认出库</button>
-        <span v-else class="dim" style="font-size:12px">已出库</span>
+        <!-- 状态文案必须与真实状态对应，草稿/已取消不能误显示为「已出库」 -->
+        <span v-else-if="Number(row.status) === 3" class="dim" style="font-size:12px">已出库</span>
+        <span v-else class="dim" style="font-size:12px">不可出库</span>
       </template>
     </DataTable>
   </div>
@@ -35,11 +37,13 @@ const query = reactive({ status: '' })
 function fmtMoney(n) {
   return '¥ ' + (Number(n) || 0).toLocaleString('zh-CN')
 }
-// 状态映射：1 待出库 / 3 已出库
+// 状态映射：0 草稿 / 1 待出库 / 3 已出库 / 4 已取消
 function statusTag(s) {
   const map = {
+    0: { type: 'gray', text: '草稿' },
     1: { type: 'warn', text: '待出库' },
-    3: { type: 'ok', text: '已出库' }
+    3: { type: 'ok', text: '已出库' },
+    4: { type: 'gray', text: '已取消' }
   }
   return map[s] || { type: 'gray', text: '未知' }
 }

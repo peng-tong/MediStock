@@ -6,11 +6,13 @@
       </template>
     </PageCard>
 
-    <!-- 状态筛选 chips（全部 / 待审核 / 已入库 / 已驳回） -->
+    <!-- 状态筛选 chips（全部 / 草稿 / 待审核 / 待入库 / 已入库 / 已驳回） -->
     <div class="filters">
       <span class="chip" :class="{ active: query.status === '' }" @click="query.status = ''">全部</span>
       <span class="chip" :class="{ active: query.status === '0' }" @click="query.status = '0'">草稿</span>
       <span class="chip" :class="{ active: query.status === '1' }" @click="query.status = '1'">待审核</span>
+      <!-- 待入库(2)：审核通过但尚未验收，此前缺少该筛选项导致该状态只能从「全部」里找 -->
+      <span class="chip" :class="{ active: query.status === '2' }" @click="query.status = '2'">待入库</span>
       <span class="chip" :class="{ active: query.status === '3' }" @click="query.status = '3'">已入库</span>
       <span class="chip" :class="{ active: query.status === '4' }" @click="query.status = '4'">已驳回</span>
     </div>
@@ -41,14 +43,15 @@
           </select>
         </div>
         <div class="f-item">
-          <label>入库仓库</label>
+          <label>入库仓库 *</label>
           <select v-model="form.warehouseId">
             <option :value="null" disabled>请选择仓库</option>
             <option v-for="w in warehouseOptions" :key="w.id" :value="w.id">{{ w.name }}</option>
           </select>
         </div>
-        <div class="f-item"><label>采购日期</label><input type="date" v-model="form.purchaseDate"></div>
-        <div class="f-item" style="grid-column:span 3"><label>备注</label><input v-model.trim="form.remark" placeholder="备注说明"></div>
+        <!-- 采购日期为制单日：后端未持久化采购日期字段，若允许编辑会出现「改了但列表仍显示创建日」的误解，故置灰只读 -->
+        <div class="f-item"><label>采购日期（制单日）</label><input type="date" v-model="form.purchaseDate" disabled></div>
+        <div class="f-item" style="grid-column:span 3"><label>备注</label><input v-model.trim="form.remark" maxlength="255" placeholder="备注说明"></div>
       </div>
 
       <!-- 明细行表：药品 / 数量 / 单价 / 金额自动 -->
@@ -65,7 +68,7 @@
                   <option v-for="d in drugOptions" :key="d.id" :value="d.id">{{ d.genericName }} {{ d.spec || '' }}</option>
                 </select>
               </td>
-              <td><input type="number" min="0" v-model.number="it.quantity" style="width:70px;height:32px;border:1.5px solid var(--line);border-radius:8px;padding:0 8px;text-align:center"></td>
+              <td><input type="number" min="1" v-model.number="it.quantity" style="width:70px;height:32px;border:1.5px solid var(--line);border-radius:8px;padding:0 8px;text-align:center"></td>
               <td><input type="number" min="0" v-model.number="it.price" style="width:80px;height:32px;border:1.5px solid var(--line);border-radius:8px;padding:0 8px;text-align:center"></td>
               <td class="name">{{ fmtMoney((Number(it.quantity) || 0) * (Number(it.price) || 0)) }}</td>
               <td><button class="btn btn-sm-danger" @click="removeRow(i)">删除</button></td>
@@ -103,7 +106,7 @@ import {
   submitPurchaseOrder, approvePurchaseOrder, rejectPurchaseOrder,
   getSupplierOptions, getWarehouseOptions, getDrugOptions
 } from '../../api/purchase'
-import { notifySuccess, notifyError } from '../../utils/notify'
+import { notifySuccess, notifyError, confirmDelete } from '../../utils/notify'
 
 const router = useRouter()
 const tableRef = ref()
@@ -181,7 +184,8 @@ async function loadOptions() {
   }
   try {
     const data = await getDrugOptions()
-    drugOptions.value = (data && data.list) || []
+    // 停用药品不可开单：仅保留启用（status=1）或未设置状态的药品
+    drugOptions.value = ((data && data.list) || []).filter(d => d.status === 1 || d.status == null)
   } catch (e) {
     drugOptions.value = [
       { id: 1, genericName: '阿莫西林胶囊', spec: '0.25g×24粒' },
@@ -237,11 +241,15 @@ const formTotal = computed(() => form.items.reduce((s, it) => s + (Number(it.qua
 // 保存：新增/编辑走接口
 async function save() {
   if (!form.supplierId) return notifyError('请选择供应商')
+  // 后端要求仓库必填，前端提前校验（否则保存后才发现 422）
+  if (!form.warehouseId) return notifyError('请选择入库仓库')
+  // 明细数量防呆：数量必须为正整数，避免 0/负数 单据入库后产生无效库存
+  if (form.items.some(it => (Number(it.quantity) || 0) <= 0)) return notifyError('明细数量必须大于 0')
   if (!form.items.length || form.items.some(it => !it.drugId)) return notifyError('请至少填写一行药品明细')
   const payload = {
     supplierId: form.supplierId,
     warehouseId: form.warehouseId,
-    purchaseDate: form.purchaseDate,
+    // purchaseDate 仅前端展示（后端无该字段），不再随请求提交，避免误以为已被持久化
     remark: form.remark,
     items: form.items.map(it => ({
       drugId: it.drugId,
@@ -293,8 +301,10 @@ async function reject(row) {
   }
 }
 
-// 删除采购单
+// 删除采购单（先二次确认，防止误点立即物理删除）
 async function remove(row) {
+  const ok = await confirmDelete(`确定删除采购单「${row.orderNo || row.id}」吗？删除后不可恢复。`)
+  if (!ok) return
   try {
     await deletePurchaseOrder(row.id)
     notifySuccess('已删除')

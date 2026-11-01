@@ -38,7 +38,8 @@ function daysLeft(dateStr) {
 // 效期状态标签：已过期 / 近效期30天 / 近效期90天 / 正常
 function expiryTag(r) {
   const days = daysLeft(r.expiryDate)
-  if (days < 0) return { type: 'danger', text: '已过期' }
+  // 当天到期按「已过期」处理，与后端 level=expired（<=今天）及预警中心口径保持一致
+  if (days <= 0) return { type: 'danger', text: '已过期' }
   if (days <= 30) return { type: 'warn', text: '近效期30天' }
   if (days <= 90) return { type: 'info', text: '近效期90天' }
   return { type: 'ok', text: '正常' }

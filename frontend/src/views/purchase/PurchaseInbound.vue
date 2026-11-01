@@ -48,9 +48,10 @@
             </div>
           </div>
           <div class="f-item"><label>经办人</label><input :value="currentPo.createByName || '-'" disabled></div>
+          <!-- 入库仓库取自采购单且不可改：后端入库一律使用采购单仓库，此前允许选择其他仓库会造成「选了 A 实际入 B」 -->
           <div class="f-item">
-            <label>入库仓库 *</label>
-            <select v-model="inbound.warehouseId">
+            <label>入库仓库（与采购单一致）</label>
+            <select v-model="inbound.warehouseId" disabled>
               <option v-for="w in warehouseOptions" :key="w.id" :value="w.id">{{ w.name }}</option>
             </select>
           </div>
@@ -73,7 +74,8 @@
                 <td class="name">{{ drugLabel(it) }}</td>
                 <td>{{ it.spec || '-' }}</td>
                 <td>{{ it.purchaseQty }} 盒</td>
-                <td><input type="number" min="0" v-model.number="it.quantity" style="width:64px;height:30px;border:1.5px solid var(--line);border-radius:8px;padding:0 8px;text-align:center"></td>
+                <!-- 本系统为整单一次入库：数量须与采购数量一致，后端同样强制校验 -->
+                <td><input type="number" min="1" v-model.number="it.quantity" :title="`须等于采购数量 ${it.purchaseQty}`" style="width:64px;height:30px;border:1.5px solid var(--line);border-radius:8px;padding:0 8px;text-align:center"></td>
                 <td><input v-model.trim="it.batchNo" placeholder="如 A20261029" style="width:130px;height:30px;border:1.5px solid var(--line);border-radius:8px;padding:0 10px"></td>
                 <td><input type="date" v-model="it.expiryDate" style="width:140px;height:30px;border:1.5px solid var(--line);border-radius:8px;padding:0 10px"></td>
                 <td>{{ it.storageCondition }}</td>
@@ -257,7 +259,8 @@ async function openInbound(row) {
     }
   }
   currentPo.value = po
-  inbound.warehouseId = po.warehouseId ?? 1
+  // 不再回退到仓库 1（可能是其他租户/其他仓库），统一使用采购单仓库
+  inbound.warehouseId = po.warehouseId ?? null
   inbound.inboundDate = todayStr()
   // 入库单号：IN-日期-序号
   inbound.inboundNo = `IN-${todayStr().replace(/-/g, '')}-001`
@@ -300,8 +303,15 @@ const inboundSum = computed(() => ({
 // 确认入库：调接口成功后进入回执视图
 const doneBatches = ref([])
 async function confirmInbound() {
+  if (!inbound.warehouseId) return notifyError('采购单缺少入库仓库，无法入库')
   const bad = inbound.items.filter(it => !it.batchNo || !it.expiryDate || (Number(it.quantity) || 0) <= 0)
   if (bad.length) return notifyError('请完整填写 本次入库数量 / 生产批号 / 有效期')
+  // 整单一次入库：本次入库数量必须等于采购数量（后端强制，前端提前提示）
+  const short = inbound.items.filter(it => Number(it.quantity) !== Number(it.purchaseQty))
+  if (short.length) return notifyError('本系统仅支持整单一次入库，本次入库数量须等于采购数量')
+  // 过期批次拦截：有效期早于今天禁止入库（后端同样拦截，此处先于提交提示）
+  const expired = inbound.items.filter(it => it.expiryDate && daysUntil(it.expiryDate) < 0)
+  if (expired.length) return notifyError('存在已过期批次，请修正有效期后再入库')
   const payload = {
     items: inbound.items.map(it => ({
       itemId: it.itemId,

@@ -23,7 +23,7 @@
     <DataTable ref="tableRef" :columns="columns" :fetch="fetchData" :mock="mockData" :query="query">
       <template #actions="{ row }">
         <button class="btn btn-sm" @click="openForm(row)">编辑</button>
-        <button class="btn btn-sm-danger" @click="remove(row)">删除</button>
+        <button class="btn btn-sm-danger" :disabled="deleting" @click="remove(row)">删除</button>
       </template>
     </DataTable>
 
@@ -42,7 +42,7 @@
         <div class="f-item"><label>存储条件</label>
           <select v-model="form.storageCondition"><option>常温 ≤30℃</option><option>阴凉 ≤20℃</option><option>冷藏 2~8℃</option></select>
         </div>
-        <div class="f-item"><label>库存下限</label><input type="number" v-model="form.minStock" placeholder="预警用"></div>
+        <div class="f-item"><label>库存下限</label><input type="number" min="0" v-model="form.minStock" placeholder="预警用"></div>
         <div class="f-item"><label>状态</label>
           <select v-model="form.status"><option :value="1">启用</option><option :value="0">停用</option></select>
         </div>
@@ -50,7 +50,7 @@
       </div>
       <template #footer>
         <button class="btn btn-ghost" @click="formVisible = false">取消</button>
-        <button class="btn btn-primary" @click="save">保存</button>
+        <button class="btn btn-primary" :disabled="saving" @click="save">保存</button>
       </template>
     </Modal>
   </div>
@@ -64,7 +64,7 @@ import DataTable from '../../components/DataTable.vue'
 import Modal from '../../components/Modal.vue'
 import StatusTag from '../../components/StatusTag.vue'
 import { getDrugs, createDrug, updateDrug, deleteDrug } from '../../api/base'
-import { notifySuccess, notifyError } from '../../utils/notify'
+import { notifySuccess, notifyError, confirmDelete } from '../../utils/notify'
 
 const tableRef = ref()
 // 查询条件（传给 DataTable，变化自动刷新）
@@ -100,6 +100,9 @@ const mockData = [
 
 // ---------- 弹窗表单 ----------
 const formVisible = ref(false)
+// 保存/删除进行中标记：按钮禁用 + 方法入口拦截，防止重复点击产生重复提交
+const saving = ref(false)
+const deleting = ref(false)
 const form = reactive({ id: null, genericName: '', tradeName: '', spec: '', dosageForm: '胶囊', manufacturer: '', approvalNo: '', barcode: '', storageCondition: '常温 ≤30℃', minStock: 50, status: 1, remark: '' })
 
 // 打开表单：新增为空表单，编辑回填
@@ -110,7 +113,11 @@ function openForm(row) {
 
 // 保存：新增/编辑走接口
 async function save() {
+  if (saving.value) return
   if (!form.genericName || !form.spec) return notifyError('通用名与规格必填')
+  // 库存下限防呆：不允许负数，避免预警/补货判断出现异常口径
+  if (form.minStock !== null && form.minStock !== '' && Number(form.minStock) < 0) return notifyError('库存下限不能为负数')
+  saving.value = true
   try {
     if (form.id) await updateDrug(form.id, form)
     else await createDrug(form)
@@ -119,17 +126,26 @@ async function save() {
     tableRef.value.reload()
   } catch (e) {
     notifyError(e.message || '保存失败')
+  } finally {
+    // 无论成功失败都恢复按钮，避免请求异常后一直处于禁用态
+    saving.value = false
   }
 }
 
-// 删除
+// 删除（先二次确认，防止误点立即物理删除）
 async function remove(row) {
+  if (deleting.value) return
+  deleting.value = true
   try {
+    const ok = await confirmDelete(`确定删除「${row.genericName || row.id}」吗？删除后不可恢复。`)
+    if (!ok) return
     await deleteDrug(row.id)
     notifySuccess('已删除')
     tableRef.value.reload()
   } catch (e) {
     notifyError(e.message || '删除失败')
+  } finally {
+    deleting.value = false
   }
 }
 </script>

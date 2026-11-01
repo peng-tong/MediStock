@@ -20,13 +20,13 @@
           </select>
         </div>
         <div class="f-item">
-          <label>退货仓库</label>
+          <label>退货仓库 *</label>
           <select v-model="form.warehouseId">
             <option :value="null" disabled>请选择仓库</option>
             <option v-for="w in warehouseOptions" :key="w.id" :value="w.id">{{ w.name }}</option>
           </select>
         </div>
-        <div class="f-item" style="grid-column:span 3"><label>备注</label><input v-model.trim="form.remark" placeholder="退货原因说明"></div>
+        <div class="f-item" style="grid-column:span 3"><label>备注</label><input v-model.trim="form.remark" maxlength="255" placeholder="退货原因说明"></div>
       </div>
 
       <!-- 明细行：药品 + 批号 + 数量 + 退货单价 + 金额自动 -->
@@ -132,10 +132,14 @@ const warehouseOptions = ref([])
 const drugOptions = ref([])
 // 批次来自后端真实库存（退货必须按批次冲减，不能用手写批号）
 const batchOptions = ref([])
-// 按药品过滤可选批次
+// 按 药品 + 退货仓库 过滤可选批次：避免选到其他仓库的批次而被后端拒绝
 function batchesFor(drugId) {
-  if (!drugId) return batchOptions.value
-  return batchOptions.value.filter(b => b.drugId === drugId)
+  return batchOptions.value.filter(b => (!drugId || b.drugId === drugId)
+    && (!form.warehouseId || b.warehouseId === form.warehouseId))
+}
+// 按 id 取批次（校验退货数量不得超过该批次剩余库存）
+function batchById(id) {
+  return batchOptions.value.find(b => b.id === id)
 }
 
 async function loadOptions() {
@@ -166,10 +170,19 @@ async function loadOptions() {
       { id: 5, genericName: '二甲双胍缓释片', spec: '0.5g×60片' }
     ]
   }
-  // 批次库存（无数据时不回退 mock，避免提交到不存在的批次）
+  // 批次库存（无数据时不回退 mock，避免提交到不存在的批次）。
+  // 后端 pageSize 上限为 100，这里循环翻页，避免只加载到前 100 个批次导致老批次无法选择
   try {
-    const data = await getStockBatches({ page: 1, pageSize: 200 })
-    batchOptions.value = (data && data.list) || []
+    const all = []
+    let page = 1
+    while (page <= 10) {
+      const data = await getStockBatches({ page, pageSize: 100 })
+      const list = (data && data.list) || []
+      all.push(...list)
+      if (!data || all.length >= Number(data.total || 0) || list.length === 0) break
+      page++
+    }
+    batchOptions.value = all
   } catch (e) {
     batchOptions.value = []
   }
@@ -198,7 +211,16 @@ const formTotal = computed(() => form.items.reduce((s, it) => s + (Number(it.qua
 // 保存退货单
 async function save() {
   if (!form.supplierId) return notifyError('请选择供应商')
+  // 后端强制要求退货仓库，前端提前提示，避免提交后才报错
+  if (!form.warehouseId) return notifyError('请选择退货仓库')
   if (!form.items.length || form.items.some(it => !it.drugId || !it.batchId)) return notifyError('请至少填写一行 药品 + 批次 明细')
+  // 数量校验：必须为正且不得超过对应批次剩余库存（退货即冲减批次）
+  for (const it of form.items) {
+    const qty = Number(it.quantity) || 0
+    if (qty <= 0) return notifyError('退货数量必须大于 0')
+    const b = batchById(it.batchId)
+    if (b && qty > (Number(b.quantity) || 0)) return notifyError(`退货数量不能超过批次剩余库存（${b.batchNo} 余 ${b.quantity}）`)
+  }
   const payload = {
     supplierId: form.supplierId,
     warehouseId: form.warehouseId,
