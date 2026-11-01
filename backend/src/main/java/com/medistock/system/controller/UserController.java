@@ -3,6 +3,7 @@ package com.medistock.system.controller;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.medistock.common.result.PageResult;
 import com.medistock.common.result.Result;
+import com.medistock.common.util.PageUtil;
 import com.medistock.system.entity.User;
 import com.medistock.system.service.UserService;
 import jakarta.validation.Valid;
@@ -24,10 +25,20 @@ public class UserController {
                                          @RequestParam(defaultValue = "10") int pageSize,
                                          @RequestParam(required = false) String keyword,
                                          @RequestParam(required = false) Integer status) {
-        Page<User> p = userService.pageQuery(page, pageSize, keyword, status);
+        Page<User> p = userService.pageQuery(PageUtil.page(page), PageUtil.pageSize(pageSize), keyword, status);
         return Result.ok(new PageResult<>(p.getTotal(), p.getRecords()));
     }
 
+    /** 详情：存在返回 200，不存在/跨租户返回 404（补齐此前缺失导致 500 的接口） */
+    @GetMapping("/{id}")
+    public Result<User> detail(@PathVariable Long id) {
+        return Result.ok(userService.detail(id));
+    }
+
+    /*
+     * 已知限制（测试问题 73，暂不处理）：RBAC 未完善，任意登录用户可管理同租户用户，
+     * 属当前正常行为，不做接口级权限校验，详见 UserService#createUser 上方注释。
+     */
     @PostMapping
     public Result<Void> create(@Valid @RequestBody UserCreateReq req) {
         userService.createUser(req.getUser(), req.getPassword());

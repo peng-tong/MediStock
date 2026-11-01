@@ -32,7 +32,12 @@ mybatis-plus:
       # 主键自增
       id-type: auto
 
-# JWT 密钥：默认值为随机生成的强密钥，生产环境务必用环境变量 JWT_SECRET 覆盖
+# JWT 密钥：不再提供硬编码默认值（S1 修复）。
+# 必须通过环境变量 JWT_SECRET 提供固定密钥；未配置时 JwtUtil 启动随机生成（重启后旧 token 失效）。
 jwt:
-  secret: ${JWT_SECRET:wRut+ppOLRV5ZQ7d2tdgE1v6aFOt8zPOZ+BsGavjl+Zl0zsOTRJGUjB4rtLYtBDH}
+  secret: ${JWT_SECRET:}
   expire-hours: 24
+
+# 图形验证码开关：true 表示登录需校验验证码（生产默认开启；仅测试/自动化场景临时关闭，测试完成后恢复）
+captcha:
+  enabled: true

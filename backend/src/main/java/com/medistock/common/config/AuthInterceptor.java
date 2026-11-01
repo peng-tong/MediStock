@@ -3,6 +3,9 @@ package com.medistock.common.config;
 import com.medistock.common.exception.BusinessException;
 import com.medistock.common.exception.ErrorCode;
 import com.medistock.common.util.JwtUtil;
+import com.medistock.common.util.TokenBlacklist;
+import com.medistock.system.entity.User;
+import com.medistock.system.mapper.UserMapper;
 import io.jsonwebtoken.Claims;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -21,6 +24,8 @@ import org.springframework.web.servlet.HandlerInterceptor;
 public class AuthInterceptor implements HandlerInterceptor {
 
     private final JwtUtil jwtUtil;
+    private final TokenBlacklist tokenBlacklist;
+    private final UserMapper userMapper;
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
@@ -28,7 +33,12 @@ public class AuthInterceptor implements HandlerInterceptor {
         if (header == null || !header.startsWith("Bearer ")) {
             throw new BusinessException(ErrorCode.UNAUTHORIZED);
         }
-        Claims claims = jwtUtil.parseToken(header.substring(7));
+        String token = header.substring(7);
+        // 登出黑名单校验：token 本身签名/有效期仍合法，但已被登出拉黑时同样按未登录处理（401）
+        if (tokenBlacklist.isRevoked(token)) {
+            throw new BusinessException(ErrorCode.UNAUTHORIZED);
+        }
+        Claims claims = jwtUtil.parseToken(token);
         if (claims == null) {
             throw new BusinessException(ErrorCode.UNAUTHORIZED);
         }
@@ -45,6 +55,19 @@ public class AuthInterceptor implements HandlerInterceptor {
             throw new BusinessException(ErrorCode.UNAUTHORIZED);
         }
         String username = claims.get("username", String.class);
+
+        /*
+         * S5 修复：每次请求校验账号是否仍存在且启用，并核对 token 中的 tenantId 与库中用户租户一致。
+         * 此前仅验签，用户被禁用/删除后旧 token 在有效期内仍可继续访问（登出黑名单只覆盖主动登出）。
+         * 注意：此处尚未写入 TenantContext，租户拦截器按超管放行；查询按主键精确定位后再比对租户，不会越权放行。
+         */
+        User account = userMapper.selectById(userId);
+        if (account == null || account.getStatus() == null || account.getStatus() != 1) {
+            throw new BusinessException(ErrorCode.UNAUTHORIZED);
+        }
+        if (account.getTenantId() == null || !tenantId.equals(account.getTenantId())) {
+            throw new BusinessException(ErrorCode.UNAUTHORIZED);
+        }
 
         // 写入请求上下文（UserContext 供业务取当前用户）
         UserContext.setUserId(userId);
