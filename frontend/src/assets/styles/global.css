@@ -207,3 +207,15 @@ table.tbl{width:100%;border-collapse:collapse;font-size:13px}
   color:var(--primary);display:grid;place-items:center}
 .placeholder h3{color:var(--ink);font-size:16px;margin-bottom:8px}
 .placeholder p{font-size:13px;line-height:1.9}
+
+/* ---------- 响应式：窄屏/移动端适配 ---------- */
+/* 表单由三列降为单列，弹窗宽度收敛，避免窄屏下字段被挤压或横向溢出 */
+@media (max-width: 768px) {
+  .form-grid{grid-template-columns:1fr}
+  .form-grid .f-item[style*="span 3"]{grid-column:span 1 !important}
+  .ms-dialog{width:92% !important;margin:0 auto}
+  .ms-dialog .el-dialog__body{max-height:70vh}
+  .toolbar .f-input{width:100% !important}
+  .toolbar .spacer{display:none}
+  .pager{justify-content:center}
+}

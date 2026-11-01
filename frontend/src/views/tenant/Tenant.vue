@@ -57,7 +57,7 @@ import { reactive, ref } from 'vue'
 import PageCard from '../../components/PageCard.vue'
 import Modal from '../../components/Modal.vue'
 import { getTenants, createTenant, updateTenantStatus, deleteTenant } from '../../api/system'
-import { notifySuccess, notifyError } from '../../utils/notify'
+import { notifySuccess, notifyError, confirmDelete } from '../../utils/notify'
 
 // 租户列表（非表格页，自行维护）
 const list = ref([])
@@ -127,8 +127,10 @@ async function toggleStatus(t) {
   }
 }
 
-// 删除
+// 删除（先二次确认，防止误点立即物理删除）
 async function remove(t) {
+  const ok = await confirmDelete(`确定删除租户「${t.name || t.id}」吗？删除后不可恢复。`)
+  if (!ok) return
   try {
     await deleteTenant(t.id)
     notifySuccess('已删除')

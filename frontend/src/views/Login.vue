@@ -20,17 +20,25 @@
           <label>账号</label>
           <div class="input">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-3.5 4.5-5 8-5s6.5 1.5 8 5"/></svg>
-            <input type="text" v-model.trim="form.username" placeholder="请输入账号">
+            <!-- autocomplete 交给浏览器密码管理器，避免预填固定账号干扰自动填充 -->
+            <input type="text" v-model.trim="form.username" placeholder="请输入账号" autocomplete="username" @keydown.enter="submit">
           </div>
         </div>
         <div class="field">
           <label>密码</label>
           <div class="input">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
-            <input type="password" v-model="form.password" placeholder="请输入密码" @keydown.enter="submit">
+            <input :type="pwdVisible ? 'text' : 'password'" v-model="form.password" placeholder="请输入密码"
+                   autocomplete="current-password" @keydown.enter="submit">
+            <!-- 密码可见切换：点击眼睛图标在明文/密文之间切换 -->
+            <button type="button" class="pwd-toggle" :title="pwdVisible ? '隐藏密码' : '显示密码'" @click="pwdVisible = !pwdVisible">
+              <svg v-if="!pwdVisible" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>
+              <svg v-else width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3l18 18"/><path d="M10.5 5.2A11.8 11.8 0 0 1 12 5c7 0 11 7 11 7a17 17 0 0 1-2.2 2.8"/><path d="M6.7 6.8A17.4 17.4 0 0 0 1 12s4 7 11 7a11 11 0 0 0 4.2-.8"/></svg>
+            </button>
           </div>
         </div>
-        <div class="field">
+        <!-- 验证码区域：后端 captcha.enabled=false 时整块隐藏（测试问题 82） -->
+        <div v-if="captchaEnabled" class="field">
           <label>验证码</label>
           <div class="captcha-row">
             <div class="input" style="flex:1">
@@ -56,17 +64,21 @@ import { userStore } from '../stores/user'
 import { getCaptcha } from '../api/auth'
 
 const router = useRouter()
-const form = reactive({ username: 'admin', password: '', captchaKey: '', captchaCode: '' })
+// 账号不再硬编码预填，避免与浏览器自动填充/密码管理器冲突
+const form = reactive({ username: '', password: '', captchaKey: '', captchaCode: '' })
 const captchaImg = ref('')
+const captchaEnabled = ref(false)   // 验证码开关（以接口返回为准）
+const pwdVisible = ref(false)       // 密码可见切换
 const loading = ref(false)
 const errorMsg = ref('')
 
-// 拉取图形验证码（key + base64 图片）
+// 拉取图形验证码（key + base64 图片 + enabled 开关）
 async function refreshCaptcha() {
   try {
     const data = await getCaptcha()
     form.captchaKey = data.key
     captchaImg.value = data.image
+    captchaEnabled.value = data.enabled !== false
   } catch (e) {
     captchaImg.value = ''
   }
@@ -82,7 +94,8 @@ async function submit() {
     router.push('/base/drugs')
   } catch (e) {
     errorMsg.value = e.message || '登录失败，请稍后重试'
-    refreshCaptcha()
+    // 仅开启验证码时刷新（关闭时无需请求验证码接口）
+    if (captchaEnabled.value) refreshCaptcha()
   } finally {
     loading.value = false
   }
@@ -117,6 +130,9 @@ onMounted(refreshCaptcha)
 .input:focus-within{border-color:var(--primary);background:#fff;box-shadow:0 0 0 3px rgba(15,118,110,.12)}
 .input svg{flex:none;color:var(--muted)}
 .input input{border:none;outline:none;flex:1;background:transparent;color:var(--ink);font-size:14px}
+/* 密码可见切换按钮：无边框，仅图标 */
+.pwd-toggle{border:none;background:transparent;color:var(--muted);cursor:pointer;display:grid;place-items:center;padding:0;flex:none}
+.pwd-toggle:hover{color:var(--primary)}
 .captcha-row{display:flex;gap:12px}
 .captcha-img{width:120px;height:46px;border-radius:12px;border:1.5px dashed var(--line);cursor:pointer;object-fit:cover}
 .captcha-box{width:120px;height:46px;border-radius:12px;border:1.5px dashed var(--line);display:grid;place-items:center;
@@ -124,4 +140,11 @@ onMounted(refreshCaptcha)
 .error{color:var(--danger);font-size:12.5px;margin:-6px 0 12px}
 .login-btn{width:100%;height:46px;margin-top:8px;font-size:15px;letter-spacing:2px}
 .tips{margin-top:22px;font-size:12px;color:var(--muted);text-align:center;line-height:1.9}
+/* 窄屏/移动端：单列布局，隐藏装饰性品牌区，保证表单可用 */
+@media (max-width: 860px) {
+  #login{grid-template-columns:1fr}
+  .login-brand{display:none}
+  .login-panel{padding:24px 18px}
+  .login-card{max-width:420px}
+}
 </style>

@@ -47,9 +47,21 @@
           </div>
           <div class="user-meta">
             <b>{{ userStore.user ? userStore.user.realName || userStore.user.username : '未登录' }}</b>
-            <span>{{ userStore.roles[0] || '超级管理员' }}</span>
+            <!-- 角色展示：真实角色优先；未分配时不再用「超级管理员」兜底误导 -->
+            <span>{{ displayRole }}</span>
           </div>
-          <div class="avatar" @click="logout">{{ firstChar }}</div>
+          <!-- 头像下拉：修改密码 / 退出登录（退出前二次确认，避免误点直接登出） -->
+          <div class="avatar-wrap">
+            <el-dropdown trigger="click" @command="onUserCommand">
+              <div class="avatar">{{ firstChar }}</div>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="password">修改密码</el-dropdown-item>
+                  <el-dropdown-item divided command="logout">退出登录</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+          </div>
         </div>
       </header>
       <div class="content">
@@ -62,8 +74,11 @@
 <script setup>
 import { computed, reactive, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import { ElMessageBox } from 'element-plus'
 import { userStore, isSuperAdmin } from '../stores/user'
 import { staticMenus } from '../menu'
+import { changePassword } from '../api/auth'
+import { notifySuccess, notifyError, confirmDelete } from '../utils/notify'
 
 const router = useRouter()
 const route = useRoute()
@@ -117,10 +132,44 @@ const firstChar = computed(() => {
   return n.slice(0, 1)
 })
 
-// 退出登录
-async function logout() {
-  await userStore.logout()
-  router.push('/login')
+// 顶栏角色展示：真实角色优先；无角色记录时按租户身份显示，杜绝「超级管理员」兜底误导
+const displayRole = computed(() => {
+  if (userStore.roles && userStore.roles.length) return userStore.roles.join(' / ')
+  return isSuperAdmin() ? '平台管理员' : '未分配角色'
+})
+
+// 头像下拉命令：修改密码 / 退出登录（退出前二次确认）
+async function onUserCommand(cmd) {
+  if (cmd === 'logout') {
+    // 退出登录弹窗：不复用「删除确认」文案，用独立的退出确认提示，避免误导
+    const ok = await ElMessageBox.confirm('确定要退出登录吗？', '退出登录', {
+      confirmButtonText: '退出登录', cancelButtonText: '取消', type: 'warning', distinguishCancelAndClose: true
+    }).then(() => true).catch(() => false)
+    if (!ok) return
+    await userStore.logout()
+    router.push('/login')
+    return
+  }
+  if (cmd === 'password') {
+    try {
+      // 两步弹窗收集 原密码 → 新密码，再调用改密接口
+      const old = await ElMessageBox.prompt('请输入当前登录密码', '修改密码', {
+        inputType: 'password', confirmButtonText: '下一步', cancelButtonText: '取消'
+      })
+      const fresh = await ElMessageBox.prompt('请输入新密码（至少 6 位）', '修改密码', {
+        inputType: 'password', confirmButtonText: '确认修改', cancelButtonText: '取消'
+      })
+      if (!fresh.value || fresh.value.length < 6) return notifyError('新密码至少 6 位')
+      await changePassword({ oldPassword: old.value, newPassword: fresh.value })
+      // 后端改密后已拉黑当前 token：提示后清理登录态并跳转登录页，避免后续请求 401
+      notifySuccess('密码已修改，请重新登录')
+      userStore.clearLocal()
+      router.push('/login')
+    } catch (e) {
+      // 用户取消弹窗（cancel/close）静默；其余为接口错误
+      if (e !== 'cancel' && e !== 'close') notifyError((e && e.message) || '修改密码失败')
+    }
+  }
 }
 </script>
 
@@ -167,4 +216,17 @@ async function logout() {
 .user-meta span{font-size:11px;color:var(--muted)}
 .avatar{width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,#0F766E,#14B8A6);color:#fff;display:grid;place-items:center;font-weight:700;font-size:15px;cursor:pointer}
 .content{flex:1;overflow-y:auto;padding:26px 28px 44px}
+/* 窄屏/移动端：侧栏收窄为图标栏，隐藏全局搜索与用户文字，保证内容区可用 */
+@media (max-width: 900px) {
+  .shell{grid-template-columns:72px 1fr}
+  .sidebar{padding:14px 8px}
+  .brand-logo{justify-content:center;padding:6px 0 14px}
+  .brand-logo span:not(.mark){display:none}
+  .nav-item span,.group-head span,.group-head .chev,.side-foot{display:none}
+  .nav-item,.group-head{justify-content:center;padding:10px 0}
+  .search-box{display:none}
+  .user-meta{display:none}
+  .topbar{padding:12px 14px;gap:10px}
+  .content{padding:16px 14px 32px}
+}
 </style>

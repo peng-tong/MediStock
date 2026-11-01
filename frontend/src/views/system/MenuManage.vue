@@ -49,7 +49,7 @@ import PageCard from '../../components/PageCard.vue'
 import DataTable from '../../components/DataTable.vue'
 import Modal from '../../components/Modal.vue'
 import { getMenus, createMenu, updateMenu, deleteMenu } from '../../api/system'
-import { notifySuccess, notifyError } from '../../utils/notify'
+import { notifySuccess, notifyError, confirmDelete } from '../../utils/notify'
 
 const tableRef = ref()
 
@@ -128,8 +128,10 @@ async function save() {
   }
 }
 
-// 删除
+// 删除（先二次确认，防止误点立即物理删除）
 async function remove(row) {
+  const ok = await confirmDelete(`确定删除菜单「${row.name || row.id}」吗？删除后不可恢复。`)
+  if (!ok) return
   try {
     await deleteMenu(row.id)
     notifySuccess('已删除')

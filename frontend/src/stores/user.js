@@ -59,9 +59,8 @@ export const userStore = reactive({
     }
   },
 
-  // 登出：清理本地登录态
-  async logout() {
-    try { await apiLogout() } catch (e) { /* 忽略登出接口异常 */ }
+  // 仅清理本地登录态（用于改密成功后 token 已失效的场景，无需再调登出接口）
+  clearLocal() {
     this.token = ''
     this.tenantId = null
     this.user = null
@@ -69,6 +68,12 @@ export const userStore = reactive({
     this.menus = null
     localStorage.removeItem('ms_token')
     localStorage.removeItem('ms_user')
+  },
+
+  // 登出：清理本地登录态
+  async logout() {
+    try { await apiLogout() } catch (e) { /* 忽略登出接口异常 */ }
+    this.clearLocal()
   }
 })
 

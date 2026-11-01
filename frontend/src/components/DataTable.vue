@@ -28,7 +28,14 @@
             </td>
           </tr>
           <tr v-if="!rows.length">
-            <td :colspan="columns.length + ($slots.actions ? 1 : 0)" class="empty">{{ loading ? '加载中...' : '暂无数据' }}</td>
+            <td :colspan="columns.length + ($slots.actions ? 1 : 0)" class="empty">
+              <!-- 接口失败：显示错误提示与重试按钮，避免静默展示假数据误导用户 -->
+              <template v-if="loadError">
+                <span style="color:var(--danger)">加载失败：{{ loadError }}</span>
+                <button class="btn btn-sm" style="margin-left:10px" @click="reload">重试</button>
+              </template>
+              <template v-else>{{ loading ? '加载中...' : '暂无数据' }}</template>
+            </td>
           </tr>
         </tbody>
       </table>
@@ -58,8 +65,10 @@ const props = defineProps({
   columns: { type: Array, default: () => [] },
   // 远程拉取函数：params => Promise<{list,total}>
   fetch: { type: Function, default: null },
-  // 兜底演示数据（fetch 失败时展示）
+  // 兜底演示数据（仅当 mockOnError=true 时在接口失败后展示，默认不回退假数据）
   mock: { type: Array, default: () => [] },
+  // 接口失败时是否回退 mock（默认 false：失败显示报错，避免假单据误导）
+  mockOnError: { type: Boolean, default: false },
   // 查询条件对象（变化后自动重新加载）
   query: { type: Object, default: () => ({}) }
 })
@@ -69,9 +78,10 @@ const total = ref(0)
 const page = ref(1)
 const pageSize = 10
 const loading = ref(false)
+const loadError = ref('')
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize)))
 
-// 加载数据：优先调接口，失败回退 mock（mock 做本地分页）
+// 加载数据：优先调接口；失败默认展示错误提示，仅 mockOnError=true 时回退 mock（mock 做本地分页）
 async function load() {
   loading.value = true
   const params = { page: page.value, pageSize, ...props.query }
@@ -80,11 +90,15 @@ async function load() {
       const data = await props.fetch(params)
       rows.value = (data.list || []).map(normalizeRow)
       total.value = Number(data.total || 0)
+      loadError.value = ''
     } else {
       useMock()
     }
   } catch (e) {
-    useMock()
+    // 接口失败不再静默展示假数据：记录错误并提示，避免用户把 mock 当真实单据
+    loadError.value = (e && e.message) ? e.message : '接口请求失败'
+    console.error('[DataTable] 列表加载失败:', e)
+    if (props.mockOnError) useMock()
   } finally {
     loading.value = false
   }
@@ -106,8 +120,8 @@ function go(p) {
 // 查询条件变化时回到第一页并刷新
 watch(() => props.query, () => { page.value = 1; load() }, { deep: true })
 
-// 对外暴露刷新方法（父组件筛选后调用 tableRef.reload()）
-defineExpose({ reload: load })
+// 对外暴露方法：reload 保持当前页刷新；reset 回到第一页刷新（筛选条件变更时避免停留在越界页）
+defineExpose({ reload: load, reset: () => { page.value = 1; load() } })
 
 load()
 </script>

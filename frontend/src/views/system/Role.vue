@@ -45,7 +45,7 @@ import PageCard from '../../components/PageCard.vue'
 import DataTable from '../../components/DataTable.vue'
 import Modal from '../../components/Modal.vue'
 import { getRoles, createRole, updateRole, deleteRole } from '../../api/system'
-import { notifySuccess, notifyError } from '../../utils/notify'
+import { notifySuccess, notifyError, confirmDelete } from '../../utils/notify'
 
 const tableRef = ref()
 // 查询条件（传给 DataTable，变化自动刷新）
@@ -97,8 +97,10 @@ async function save() {
   }
 }
 
-// 删除
+// 删除（先二次确认，防止误点立即物理删除）
 async function remove(row) {
+  const ok = await confirmDelete(`确定删除角色「${row.name || row.id}」吗？删除后不可恢复。`)
+  if (!ok) return
   try {
     await deleteRole(row.id)
     notifySuccess('已删除')

@@ -31,11 +31,12 @@
     <!-- 新增/编辑弹窗 -->
     <Modal :visible="formVisible" :title="form.id ? '编辑用户' : '新增用户'" @close="formVisible = false">
       <div class="form-grid">
-        <div class="f-item"><label>用户名 *</label><input v-model.trim="form.username" placeholder="登录账号" autocomplete="off"></div>
-        <div class="f-item"><label>姓名 *</label><input v-model.trim="form.realName" placeholder="真实姓名" autocomplete="off"></div>
-        <div class="f-item"><label>手机号</label><input v-model.trim="form.phone" placeholder="手机号" autocomplete="off"></div>
+        <!-- 输入框聚焦时全选已有内容：重新输入即覆盖旧值，避免自动化/输入法在旧内容后叠加导致整段重复（测试问题 81） -->
+        <div class="f-item"><label>用户名 *</label><input v-model.trim="form.username" placeholder="登录账号" autocomplete="off" @focus="$event.target.select()"></div>
+        <div class="f-item"><label>姓名 *</label><input v-model.trim="form.realName" placeholder="真实姓名" autocomplete="off" @focus="$event.target.select()"></div>
+        <div class="f-item"><label>手机号</label><input v-model.trim="form.phone" placeholder="手机号" autocomplete="off" @focus="$event.target.select()"></div>
         <!-- 邮箱不做默认值，新增时留空，避免浏览器自动填充 -->
-        <div class="f-item"><label>邮箱</label><input v-model.trim="form.email" placeholder="邮箱（选填）" autocomplete="off" name="ms-user-email"></div>
+        <div class="f-item"><label>邮箱</label><input v-model.trim="form.email" placeholder="邮箱（选填）" autocomplete="off" name="ms-user-email" @focus="$event.target.select()"></div>
         <!-- 密码仅新增时可设置（后端更新接口不允许改密） -->
         <div v-if="!form.id" class="f-item">
           <label>登录密码</label>
@@ -45,7 +46,9 @@
         <div v-if="!form.id && isSuperAdmin() && tenantOptions.length" class="f-item">
           <label>所属租户</label>
           <select v-model="form.tenantId">
-            <option :value="null">平台（不绑定租户）</option>
+            <!-- S5 修复：后端禁止超管创建无租户（平台级）用户以防提权，前端去掉「平台（不绑定租户）」选项，
+                 避免用户选中后必然报错「创建用户必须指定归属租户」 -->
+            <option :value="null" disabled>请选择所属租户</option>
             <option v-for="t in tenantOptions" :key="t.id" :value="t.id">{{ t.name }}</option>
           </select>
         </div>
@@ -55,7 +58,8 @@
       </div>
       <template #footer>
         <button class="btn btn-ghost" @click="formVisible = false">取消</button>
-        <button class="btn btn-primary" @click="save">保存</button>
+        <!-- 保存中禁用按钮，避免重复点击产生重复提交 -->
+        <button class="btn btn-primary" :disabled="saving" @click="save">{{ saving ? '保存中...' : '保存' }}</button>
       </template>
     </Modal>
   </div>
@@ -68,7 +72,7 @@ import PageCard from '../../components/PageCard.vue'
 import DataTable from '../../components/DataTable.vue'
 import Modal from '../../components/Modal.vue'
 import { getUsers, createUser, updateUser, deleteUser, updateUserStatus, resetUserPassword, getTenants } from '../../api/system'
-import { notifySuccess, notifyError } from '../../utils/notify'
+import { notifySuccess, notifyError, confirmDelete } from '../../utils/notify'
 import { isSuperAdmin } from '../../stores/user'
 
 const tableRef = ref()
@@ -110,6 +114,7 @@ const mockData = [
 
 // ---------- 弹窗表单 ----------
 const formVisible = ref(false)
+const saving = ref(false)
 const form = reactive({ id: null, username: '', realName: '', phone: '', email: '', status: 1, password: '', tenantId: null })
 
 // 租户下拉：仅平台超管加载；普通租户账号不请求该接口（所属租户由后端强制为当前租户）
@@ -133,9 +138,15 @@ function openForm(row) {
   formVisible.value = true
 }
 
-// 保存：新增/编辑走接口
+// 保存：新增/编辑走接口（前端先做必填与密码长度校验，后端仍有同口径兜底）
 async function save() {
+  if (saving.value) return
   if (!form.username || !form.realName) return notifyError('用户名与姓名必填')
+  // 新增时密码留空默认 admin123；手填则要求 6~64 位（与后端校验一致）
+  if (!form.id && form.password && (form.password.length < 6 || form.password.length > 64)) {
+    return notifyError('密码长度必须为 6~64 位')
+  }
+  saving.value = true
   try {
     if (form.id) await updateUser(form.id, form)
     else await createUser(form)
@@ -144,6 +155,8 @@ async function save() {
     tableRef.value.reload()
   } catch (e) {
     notifyError(e.message || '保存失败')
+  } finally {
+    saving.value = false
   }
 }
 
@@ -169,8 +182,10 @@ async function resetPassword(row) {
   }
 }
 
-// 删除
+// 删除（先二次确认，防止误点立即物理删除）
 async function remove(row) {
+  const ok = await confirmDelete(`确定删除用户「${row.username || row.id}」吗？删除后不可恢复。`)
+  if (!ok) return
   try {
     await deleteUser(row.id)
     notifySuccess('已删除')
